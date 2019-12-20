@@ -25,12 +25,12 @@ class Data(Dataset):
     def __init__(self, Data_dir, class1, class2, stage, ratio=(0.6, 0.2, 0.2), seed=1000):
         random.seed(seed)
         self.Data_dir = Data_dir
-        Data_list0 = read_txt('./lookuptxt/', class0 + '.txt')
-        Data_list1 = read_txt('./lookuptxt/', class1 + '.txt')
+        Data_list0 = read_txt('../lookuptxt/', class1 + '.txt')
+        Data_list1 = read_txt('../lookuptxt/', class2 + '.txt')
         self.Data_list = Data_list0 + Data_list1
         self.Label_list = [0]*len(Data_list0) + [1]*len(Data_list1)
         self.stage = stage
-        self.length = len(Data_list)
+        self.length = len(self.Data_list)
         idxs = list(range(self.length))
         random.shuffle(idxs)
         split1, split2 = int(self.length*ratio[0]), int(self.length*(ratio[0]+ratio[1]))
@@ -49,7 +49,7 @@ class Data(Dataset):
     def __getitem__(self, idx):
         index = self.index_list[idx]
         label = self.Label_list[index]
-        data = np.load(self.Data_list[index])
+        data = np.load(self.Data_dir + self.Data_list[index])
         data = np.expand_dims(data, axis=0) 
         return data, label
 
@@ -105,7 +105,12 @@ class GAN_dataset(Data):
             
 if __name__ == "__main__":
     dataset = Data(Data_dir='/data/datasets/ADNI_NoBack/', class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='train')
-
+    for i in range(len(dataset)):
+        scan, label = dataset[i]
+        print(scan.shape, label)
+    dataloader = DataLoader(dataset, batch_size=10, shuffle=True, drop_last=True)
+    for scan, label in dataloader:
+        print(scan.shape, label)
 
 
 
