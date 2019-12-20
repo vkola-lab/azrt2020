@@ -4,6 +4,14 @@ import torch.nn as nn
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from numpy import random
+import json
+
+
+
+def read_json(config_file):
+    with open(config_file) as config_buffer:    
+        config = json.loads(config_buffer.read())
+    return config
 
 def remove_dup(list1, list2):
     # remove the 82 cases (list2) from 417 cases (list1)

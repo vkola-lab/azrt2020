@@ -49,7 +49,7 @@ class Data(Dataset):
     def __getitem__(self, idx):
         index = self.index_list[idx]
         label = self.Label_list[index]
-        data = np.load(self.Data_dir + self.Data_list[index])
+        data = np.load(self.Data_dir + self.Data_list[index]).astype(np.float32)
         data = np.expand_dims(data, axis=0) 
         return data, label
 
@@ -89,7 +89,7 @@ class GAN_dataset(Data):
 
     def __getitem__(self, idx):
         index = self.index_list[idx]
-        data = np.load(self.Data_list[index])
+        data = np.load(self.Data_list[index]).astype(np.float32)
         label = self.Label_list[index]
         if not self.whole:
             if self.stage == 'train':
