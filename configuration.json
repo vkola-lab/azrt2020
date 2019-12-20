@@ -1,0 +1,8 @@
+{
+    "Data_dir"        : "/data/datasets/ADNI_NoBack/",
+    "batch_size"      : 2,
+    "lr"              : 0.01,
+    "class1"          : "ADNI_1.5T_NL",
+    "class2"          : "ADNI_1.5T_AD",
+    "checkpoint_dir"  : "."
+}
