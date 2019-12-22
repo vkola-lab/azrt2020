@@ -48,8 +48,36 @@ class Vanila_CNN(nn.Module):
         x = self.classifier(x)
         return x
 
+
+# define the discriminator
+class Vanila_CNN_Lite(nn.Module):
+    def __init__(self, fil_num, drop_rate):
+        super(Vanila_CNN_Lite, self).__init__()
+        self.block1 = ConvLayer(1, fil_num, 0.1, (7, 2, 0), (3, 2, 0))
+        self.block2 = ConvLayer(fil_num, 2*fil_num, 0.1, (4, 1, 0), (2, 2, 0))
+        self.block3 = ConvLayer(2*fil_num, 4*fil_num, 0.1, (3, 1, 0), (2, 2, 0))
+        self.block4 = ConvLayer(4*fil_num, 8*fil_num, 0.1, (3, 1, 0), (2, 1, 0))
+        self.classifier = nn.Sequential(
+            nn.Dropout(drop_rate),
+            nn.Linear(8*fil_num*6*8*6, 30),
+            nn.LeakyReLU(),
+            nn.Dropout(drop_rate),
+            nn.Linear(30, 2),
+        )
+
+    def forward(self, x):
+        x = self.block1(x)
+        x = self.block2(x)
+        x = self.block3(x)
+        x = self.block4(x)
+        batch_size = x.shape[0]
+        x = x.view(batch_size, -1)
+        x = self.classifier(x)
+        return x
+
+
 if __name__ == "__main__":
-    model = Vanila_CNN(10, 0.5).cuda()
-    input = torch.Tensor(3, 1, 181, 217, 181).cuda()
+    model = Vanila_CNN_Lite(10, 0.5).cuda()
+    input = torch.Tensor(10, 1, 181, 217, 181).cuda()
     output = model(input)
     print(output.shape)
