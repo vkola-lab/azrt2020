@@ -1,5 +1,5 @@
 import os
-from models import Vanila_CNN 
+from models import Vanila_CNN, Vanila_CNN_Lite
 from utils import * 
 from dataloader import Data
 import torch
@@ -18,7 +18,7 @@ from tqdm import tqdm
 class CNN:
     def __init__(self, config, seed):
         self.config = read_json(config)
-        self.model = Vanila_CNN(fil_num=10, drop_rate=0.5).cuda()
+        self.model = Vanila_CNN_Lite(fil_num=self.config['fil_num'], drop_rate=self.config['drop_rate']).cuda()
         self.checkpoint_dir = self.config["checkpoint_dir"]
         self.train_dataloader = DataLoader(Data(self.config['Data_dir'], self.config['class1'], self.config['class2'], seed=seed, stage='train'),
                                            batch_size=self.config['batch_size'], shuffle=True, drop_last=True)
@@ -29,7 +29,7 @@ class CNN:
 
     def train(self):
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config['lr'], betas=(0.5, 0.999))
-        self.criterion = nn.CrossEntropyLoss().cuda()
+        self.criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1, self.config['imbalance_ratio']])).cuda()
         self.optimal_valid_matrix = [[0,0],[0,0]]
         self.valid_optimal_accu, self.epoch = 0, -1
         for epoch in range(self.config['epochs']):
@@ -41,6 +41,7 @@ class CNN:
         return self.valid_optimal_accu
 
     def test(self):
+        self.model.load_state_dict(torch.load('{}CNN_{}.pth'.format(self.checkpoint_dir, self.epoch)))
         with torch.no_grad():
             self.model.train(False)
             test_matrix = [[0, 0], [0, 0]]
@@ -49,7 +50,7 @@ class CNN:
                 preds = self.model(inputs)
                 test_matrix = matrix_sum(test_matrix, get_confusion_matrix(preds, labels))
         print('Test confusion matrix:', test_matrix, 'test_accuracy:', "%.4f" % get_accu(test_matrix))
-        return test_accuracy
+        return get_accu(test_matrix)
     
     def save_checkpoint(self, valid_matrix, epoch):
         if get_accu(valid_matrix) >= self.valid_optimal_accu:
