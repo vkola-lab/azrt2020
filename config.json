@@ -5,11 +5,23 @@
     "likelihood"      : "GAUSSIAN",
     "database"        : {"address" : "localhost"},
     "variables" : {
+        "fil_num" : {
+            "type" : "INT",
+            "size" : 1,
+            "min"  : 5,
+            "max"  : 20
+        },
+        "drop_rate" : {
+            "type" : "INT",
+            "size" : 1,
+            "min"  : 0,
+            "max"  : 1
+        },
         "batch_size" : {
             "type" : "INT",
             "size" : 1,
-            "min"  : 1,
-            "max"  : 2
+            "min"  : 2,
+            "max"  : 16
         },
         "lr" : {
             "type" : "FLOAT",

@@ -2,11 +2,13 @@ import subprocess
 import json
 import os
 
-def function(batch_size, lr, epoches):
+def function(fil_num, drop_rate, batch_size, lr, epoches):
 
     filename = 'configuration.json'
     with open(filename, 'r') as f:
         data = json.load(f)
+        data['fil_num'] = fil_num
+        data['drop_rate'] = drop_rate
         data['batch_size'] = batch_size
         data['lr'] = lr
         data['epochs'] = epoches
@@ -27,6 +29,8 @@ def function(batch_size, lr, epoches):
 
 def main(job_id, params):
     print(params)
-    return function(params['batch_size'],
+    return function(params['fil_num'],
+                    params['drop_rate'],
+                    params['batch_size'],
                     params['lr'],
                     params['epochs'])
