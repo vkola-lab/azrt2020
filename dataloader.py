@@ -53,6 +53,15 @@ class Data(Dataset):
         data = np.expand_dims(data, axis=0) 
         return data, label
 
+    def get_sample_weights(self):
+        labels = []
+        for idx in self.index_list:
+            labels.append(self.Label_list[idx])
+        weights = []
+        count, count0, count1 = float(len(labels)), float(labels.count(0)), float(labels.count(1))
+        weights = [count/count0 if i == 0 else count/count1 for i in labels]
+        return weights, count0 / count1
+
 
 class PatchGenerator:
     def __init__(self, patch_size):
@@ -104,13 +113,16 @@ class GAN_dataset(Data):
             return np.expand_dims(data, axis=0), label
             
 if __name__ == "__main__":
-    dataset = Data(Data_dir='/data/datasets/ADNI_NoBack/', class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='train')
+    dataset = Data(Data_dir='/data/datasets/ADNI_NoBack/', class1='ADNI_1.5T_GAN_NL', class2='ADNI_1.5T_GAN_AD', stage='train')
+    labels = []
+    print(dataset.get_sample_weights())
     for i in range(len(dataset)):
         scan, label = dataset[i]
-        print(scan.shape, label)
-    dataloader = DataLoader(dataset, batch_size=10, shuffle=True, drop_last=True)
-    for scan, label in dataloader:
-        print(scan.shape, label)
+        labels.append(label)
+    print(labels)
+    # dataloader = DataLoader(dataset, batch_size=10, shuffle=True, drop_last=True)
+    # for scan, label in dataloader:
+    #     print(scan.shape, label)
 
 
 
