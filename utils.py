@@ -89,6 +89,14 @@ def get_labels(index_list, Label_list, stage):
     label_list = np.asarray(label_list)
     return Variable(torch.LongTensor(label_list)).cuda()
 
+def write_raw_score(f, preds, labels):
+    preds = preds.data.cpu().numpy()
+    labels = labels.data.cpu().numpy()
+    for index, pred in enumerate(preds):
+        label = str(labels[index])
+        pred = "__".join(map(str, list(pred)))
+        f.write(pred + '__' + label + '\n')
+
 def get_confusion_matrix(preds, labels):
     labels = labels.data.cpu().numpy()
     preds = preds.data.cpu().numpy()
