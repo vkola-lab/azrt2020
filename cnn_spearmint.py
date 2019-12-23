@@ -4,7 +4,8 @@ import os
 
 def function(fil_num, drop_rate, batch_size, lr, epoches):
 
-    filename = 'configuration.json'
+    filename = 'configuration_3T_GAN_B0.json'
+    #filename = 'configuration.json'
     with open(filename, 'r') as f:
         data = json.load(f)
         data['fil_num'] = fil_num
