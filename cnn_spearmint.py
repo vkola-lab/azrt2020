@@ -20,7 +20,7 @@ def function(fil_num, drop_rate, batch_size, lr, epoches):
     with open(filename, 'w') as f:
         json.dump(data, f)
 
-    command = ['python3', 'main.py']
+    command = ['python3', 'main.py', filename]
 
     output = subprocess.Popen(command, stdout=subprocess.PIPE)
     val = str(output.communicate()[0])
