@@ -1,9 +1,8 @@
 {
     "language"        : "PYTHON",
     "main-file"       : "cnn_spearmint.py",
-    "experiment-name" : "test1",
+    "experiment-name" : "test82",
     "likelihood"      : "GAUSSIAN",
-    "database"        : {"address" : "localhost"},
     "variables" : {
         "fil_num" : {
             "type" : "INT",
@@ -34,6 +33,12 @@
             "size" : 1,
             "min"  : 30,
             "max"  : 200
+        },
+        "balanced" : {
+            "type" : "INT",
+            "size" : 1,
+            "min"  : 0,
+            "max"  : 1
         }
     }
 }
