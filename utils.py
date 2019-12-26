@@ -162,7 +162,6 @@ def pr_interp(rc_, rc, pr):
         pr_[idx] = rc_[idx]/(a*rc_[idx]+b)
     return pr_
 
-
 def read_txt(path, txt_file):
     content = []
     with open(path + txt_file, 'r') as f:

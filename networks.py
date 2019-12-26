@@ -71,6 +71,9 @@ class CNN:
         f.close()
         return get_accu(test_matrix)
 
+    def get_checkpoint_dir(self):
+        return self.checkpoint_dir
+
     def save_checkpoint(self, valid_matrix, epoch):
         if get_accu(valid_matrix) >= self.valid_optimal_accu:
             self.epoch = epoch
