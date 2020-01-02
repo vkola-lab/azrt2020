@@ -1,7 +1,7 @@
 import os
 from models import Vanila_CNN, Vanila_CNN_Lite, _netD, _netG
 from utils import * 
-from dataloader import Data
+from dataloader import Data, GAN_Data
 import torch
 import torch.nn as nn
 from torch.utils.data import Dataset, DataLoader
@@ -108,7 +108,112 @@ class CNN:
                 valid_matrix = matrix_sum(valid_matrix, get_confusion_matrix(preds, labels))
         return valid_matrix
 
+
+class GAN:
+    def __init__(self, config, seed):
+        self.seed = seed
+        self.config = read_json(config)
+        self.netG = _netG(self.config["G_fil_num"]).cuda()
+        self.netD = _netD(self.config["D_fil_num"]).cuda()
+        self.checkpoint_dir = self.config["checkpoint_dir"] + 'gan/'
+        if not os.path.exists(self.checkpoint_dir):
+            os.mkdir(self.checkpoint_dir)
+        self.train_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='train'),
+                                           batch_size=self.config['batch_size'], shuffle=True)
+        self.valid_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='valid'),
+                                           batch_size=self.config['batch_size'], shuffle=True)
+        self.test_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='test'),
+                                           batch_size=self.config['batch_size'], shuffle=True)
+
+    def train(self):
+        self.optimizer_G = optim.SGD([ {'params': self.netG.conv1.parameters()},
+                          {'params': self.netG.conv2.parameters()},
+                          {'params': self.netG.conv3.parameters(), 'lr': 0.1*G_lr},
+                          {'params': self.netG.BN1.parameters(), 'lr':G_lr},
+                          {'params': self.netG.BN2.parameters(), 'lr':G_lr},
+                        ], lr=self.config["G_lr"], momentum=0.9)
+        self.optimizer_D = optim.Adam(self.netD.parameters(), lr=self.config["D_lr"], betas=(0.5, 0.999))
+        self.criterion = nn.BCELoss().cuda()
+        self.valid_optimal_metric, self.epoch = 0, -1
+        for epoch in range(self.config['epochs']):
+            self.train_model_epoch()
+            valid_metric = self.valid_model_epoch()
+            print('This epoch validation metric (SSIM):', valid_metric)
+            self.save_checkpoint(valid_metric, epoch)
+        print('(GAN) Best validation metric at the {}th epoch:'.format(self.epoch), self.valid_optimal_metric)
+        return self.valid_optimal_metric
+        
+    def train_model_epoch(self):
+        self.netG.train(True)
+        self.netD.train(True)
+        label = torch.FloatTensor(self.config["batch_size"])
+        for inputs_lo, inputs_hi in self.train_dataloader:
+            inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
+            # get gradient for D network with fake data
+            self.netD.zero_grad()
+            Mask = self.netG(Input)
+            Output = Input + Mask
+            Foutput = self.netD(Output.detach())
+            Flabel = label.fill_(0).cuda()
+            loss_D_F = self.criterion(Foutput, Flabel)
+            loss_D_F.backward()
+            # get gradient for D network with real data
+            Routput = netD(inputs_hi)
+            Rlabel = label.fill_(1).cuda()
+            loss_D_R = self.criterion(Routput, Rlabel)
+            loss_D_R.backward()
+            self.optimizer_D.step()
+            # get gradient for G network
+            self.netG.zero_grad()
+            Goutput = netD(Output)
+            Glabel = label.fill_(1).cuda()
+            loss_G_GAN = self.criterion(Goutput, Glabel)
+            # get gradient for G network with L2 norm between real and fake
+            loss_G_dif = torch.mean(torch.abs(Mask))
+            loss_G = loss_G_GAN + self.config["L2_norm_factor"] * loss_G_dif
+            # loss_G.backward(retain_graph=True)
+            loss_G.backward(retain_graph=True)
+            self.optimizer_G.step()
+
+    def valid_model_epoch(self):
+        with torch.no_grad():
+            self.netG.train(False)
+            valid_metric = 0
+            for inputs_lo, inputs_hi in self.valid_dataloader:
+                inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
+                Mask = self.netG(inputs_lo)
+                Output = inputs_lo + Mask
+                valid_metric += SSIM(inputs_hi, Output)
+        return valid_metric
+
+    def get_checkpoint_dir(self):
+        return self.checkpoint_dir
+
+    def save_checkpoint(self, valid_metric, epoch):
+        if valid_metric >= self.valid_optimal_metric:
+            self.epoch = epoch
+            self.valid_optimal_metric = valid_metric
+            for root, Dir, Files in os.walk(self.checkpoint_dir):
+                for File in Files:
+                    if File.endswith('.pth'):
+                        try:
+                            os.remove(self.checkpoint_dir + File)
+                        except:
+                            pass
+            torch.save(self.netG.state_dict(), '{}G_{}.pth'.format(self.checkpoint_dir, self.epoch))
+
+    def test(self):
+        self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, self.epoch)))
+        with torch.no_grad():
+            self.netG.train(False)
+            test_matrix = [[0, 0], [0, 0]]
+            for inputs_lo, inputs_hi in self.test_dataloader:
+                inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
+                # do some plots and post analysis
+
             
 if __name__ == "__main__":
     cnn = CNN('./configuration.json', 1000)
     cnn.test()
+
+    
