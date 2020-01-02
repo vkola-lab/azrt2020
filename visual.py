@@ -6,7 +6,7 @@ import os
 from sklearn.metrics import confusion_matrix, roc_auc_score
 from sklearn.metrics import roc_curve, auc, confusion_matrix
 from glob import glob
-
+from utils import read_txt
 
 def read_score_label(file):
     score, label = [], []
@@ -37,7 +37,6 @@ def get_metrics(matrix):
     F1 = 2 * precision * recall / (precision + recall)
     MCC = (tp*tn-fp*fn) / ((tp+fp)*(tp+fn)*(tn+fp)*(tn+fn))**0.5
     return accuracy, precision, recall, F1, MCC
-
 
 def ROC_plot(path):
     TPR = []
@@ -76,6 +75,66 @@ def ROC_plot(path):
     plt.savefig('{}{}.png'.format(path, name))
     plt.close()
 
+def bold_axs_stick(axs, fontsize):
+    for tick in axs.xaxis.get_major_ticks():
+        tick.label1.set_fontsize(fontsize)
+        tick.label1.set_fontweight('bold')
+    for tick in axs.yaxis.get_major_ticks():
+        tick.label1.set_fontsize(fontsize)
+        tick.label1.set_fontweight('bold')
+
+def MRI_slice_plot(out_dir, mri_low, mri_high):
+    img15 = np.load(mri_low)
+    img3 = np.load(mri_high)
+    id = mri_low.split('/')[-1][5:15]
+    plt.set_cmap("gray")
+    plt.subplots_adjust(wspace=0.3, hspace=0.3)
+    fig, axs = plt.subplots(2, 3, figsize=(20,12))
+    side_a = 100
+    side_b = 160
+    axs[0, 0].imshow(img15[:, :, 105].T, vmin=-1, vmax=2.5)
+    axs[0, 0].set_title('1.5T', fontsize=25)
+    axs[0, 0].axis('off')
+    axs[1, 0].imshow(img3[:, :, 105].T, vmin=-1, vmax=2.5)
+    axs[1, 0].set_title('3T', fontsize=25)
+    axs[1, 0].axis('off')
+
+    axs[0, 1].imshow(img15[side_a:side_b, side_a:side_b, 105].T, vmin=-1, vmax=2.5)
+    axs[0, 1].set_title('1.5T zoom in', fontsize=25)
+    axs[1, 1].imshow(img3[side_a:side_b, side_a:side_b, 105].T, vmin=-1, vmax=2.5)
+    axs[1, 1].set_title('3T zoom in', fontsize=25)
+    axs[0, 1].axis('off')
+    axs[1, 1].axis('off')
+
+    axs[0, 2].hist(img15[side_a:side_b, side_a:side_b, 105].T.flatten(), bins=50, range=(0, 1.8))
+    bold_axs_stick(axs[0, 2], 16)
+    axs[0, 2].set_xticks([0, 0.5, 1, 1.5])
+    axs[0, 2].set_yticks([0, 100, 200, 300])
+    axs[0, 2].set_title('1.5T voxel histogram', fontsize=25)
+    axs[1, 2].hist(img3[side_a:side_b, side_a:side_b, 105].T.flatten(), bins=50, range=(0, 1.8))
+    bold_axs_stick(axs[1, 2], 16)
+    axs[1, 2].set_xticks([0, 0.5, 1, 1.5])
+    axs[1, 2].set_yticks([0, 100, 200, 300])
+    axs[1, 2].set_title('3T voxel histogram', fontsize=25)
+    plt.savefig(out_dir + '{}.png'.format(id), dpi=150)
+    plt.close()
+
+
+def all_mri_plot(path, txt_low, txt_high):
+    low_list = read_txt('../lookuptxt/', txt_low)
+    high_list = read_txt('../lookuptxt/', txt_high)
+    for i in range(len(low_list)):
+        low_mri, high_mri = path + low_list[i], path + high_list[i]
+        MRI_slice_plot('../mri_image/', low_mri, high_mri)
+        break
+
+
+
+
+
+
+
 if __name__ == "__main__":
-    ROC_plot('../model_checkpoint/ADNI_3T_NL_ADNI_3T_AD_balance0/')
+    # ROC_plot('../model_checkpoint/ADNI_3T_NL_ADNI_3T_AD_balance0/')
+    all_mri_plot('/data/datasets/ADNI_NoBack/', 'ADNI_1.5T_GAN_AD.txt', 'ADNI_3T_AD.txt')
 

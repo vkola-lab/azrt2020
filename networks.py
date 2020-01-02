@@ -1,5 +1,5 @@
 import os
-from models import Vanila_CNN, Vanila_CNN_Lite
+from models import Vanila_CNN, Vanila_CNN_Lite, _netD, _netG
 from utils import * 
 from dataloader import Data
 import torch
@@ -70,6 +70,9 @@ class CNN:
         print('Test confusion matrix:', test_matrix, 'test_accuracy:', "%.4f" % get_accu(test_matrix))
         f.close()
         return get_accu(test_matrix)
+
+    def get_checkpoint_dir(self):
+        return self.checkpoint_dir
 
     def save_checkpoint(self, valid_matrix, epoch):
         if get_accu(valid_matrix) >= self.valid_optimal_accu:

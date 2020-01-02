@@ -76,6 +76,52 @@ class Vanila_CNN_Lite(nn.Module):
         return x
 
 
+# define the generator
+class _netG(nn.Module):
+    def __init__(self, num):
+        super(_netG, self).__init__()
+        self.conv1 = nn.Conv3d(1, 2*num, kernel_size=(5,5,5), stride=(1,1,1), padding=(2,2,2))
+        self.conv2 = nn.Conv3d(2*num, num, kernel_size=(1,1,1), stride=(1,1,1), padding=0)
+        self.conv3 = nn.Conv3d(num, 1, kernel_size=(3,3,3), stride=(1,1,1), padding=(1,1,1))
+        self.relu = nn.ReLU()
+        self.BN1 = nn.BatchNorm3d(2*num)
+        self.BN2 = nn.BatchNorm3d(num)
+
+    def forward(self, Input):
+        Input1 = self.relu(self.BN1(self.conv1(Input)))
+        Input2 = self.relu(self.BN2(self.conv2(Input1)))
+        Input3 = self.conv3(Input2)
+        return Input3
+
+# define the discriminator
+class _netD(nn.Module):
+    def __init__(self, num):
+        super(_netD, self).__init__()
+        self.main = nn.Sequential(
+            # 50 50 50
+            nn.Conv3d(1, num, 4, 2, 0, bias=False),
+            nn.BatchNorm3d(num),
+            nn.LeakyReLU(),
+            # 24 24 24
+            nn.Conv3d(num, 2*num, 4, 2, 0, bias=False),
+            nn.BatchNorm3d(2*num),
+            nn.LeakyReLU(),
+            # 11 11 11
+            nn.Conv3d(2*num, 4*num, 4, 2, 1, bias=False),
+            nn.BatchNorm3d(4*num),
+            nn.LeakyReLU(),
+            # 5 5 5
+            nn.Conv3d(4*num, 8*num, 3, 2, 0, bias=False),
+            nn.BatchNorm3d(8*num),
+            nn.LeakyReLU(),
+            # 2, 2, 2
+            nn.Conv3d(8*num, 1, 2, 1, 0, bias=False),
+            nn.Sigmoid(),
+        )
+
+    def forward(self, x):
+        return self.main(x).squeeze()
+
 if __name__ == "__main__":
     model = Vanila_CNN_Lite(10, 0.5).cuda()
     input = torch.Tensor(10, 1, 181, 217, 181).cuda()
