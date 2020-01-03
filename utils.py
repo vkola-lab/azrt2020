@@ -5,8 +5,19 @@ from torch.autograd import Variable
 import matplotlib.pyplot as plt
 from numpy import random
 import json
+from skimage import img_as_float
+from skimage.metrics import structural_similarity as ssim
 
-
+def SSIM(tensors1, tensors2):
+    ssim_list = []
+    for i in range(tensors1.shape[0]):
+        tensor1, tensor2 = tensors1[i], tensors2[i]
+        for slice_idx in [50, 80, 110, 140]:
+            img1, img2 = tensor1[slice_idx], tensor2[slice_idx]
+            ssim_val = ssim(img1, img2, data_range=max(img1.max(), img2.max()) - min(img1.min(), img2.min()))
+            ssim_list.append(ssim_val)
+    ssim_avg = sum(ssim_list) / len(ssim_list)
+    return ssim_avg
 
 def read_json(config_file):
     with open(config_file) as config_buffer:    
