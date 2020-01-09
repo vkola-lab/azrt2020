@@ -1,6 +1,6 @@
 import os
 from models import Vanila_CNN, Vanila_CNN_Lite, _netD, _netG
-from utils import * 
+from utils import *
 from dataloader import Data, GAN_Data
 import torch
 import torch.nn as nn
@@ -9,7 +9,7 @@ import torch.optim as optim
 from tqdm import tqdm
 
 """
-1. augmentation, small rotation, 
+1. augmentation, small rotation,
 2. hyperparameter auto tunning
 3. early stopping or set epoch
 
@@ -121,9 +121,9 @@ class GAN:
         self.train_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='train'),
                                            batch_size=self.config['batch_size'], shuffle=True)
         self.valid_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='valid'),
-                                           batch_size=self.config['batch_size'], shuffle=True)
+                                           batch_size=1, shuffle=True)
         self.test_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='test'),
-                                           batch_size=self.config['batch_size'], shuffle=True)
+                                           batch_size=1, shuffle=True)
 
     def train(self):
         self.G_lr, self.D_lr = self.config["G_lr"], self.config["D_lr"]
@@ -143,7 +143,7 @@ class GAN:
             self.save_checkpoint(valid_metric)
         print('(GAN) Best validation metric at the {}th epoch:'.format(self.optimal_epoch), self.valid_optimal_metric)
         return self.valid_optimal_metric
-        
+
     def train_model_epoch(self):
         self.netG.train(True)
         self.netD.train(True)
@@ -217,10 +217,7 @@ class GAN:
                 inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
                 # do some plots and post analysis
 
-            
+
 if __name__ == "__main__":
     gan = GAN('./GAN_config.json', 1000)
     gan.train()
-
-
-

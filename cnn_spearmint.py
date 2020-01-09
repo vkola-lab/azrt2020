@@ -8,9 +8,9 @@ def read_json(config_file):
     return config
 
 
-def function(fil_num, drop_rate, batch_size, lr, epoches, balanced):
+def function(fil_num, drop_rate, batch_size, lr, epochs, balanced):
 
-    filename = 'configuration_1.5T_GAN.json'
+    filename = 'configuration_1.5T.json'
     #filename = 'configuration.json'
 
     data = read_json(filename)
@@ -18,7 +18,7 @@ def function(fil_num, drop_rate, batch_size, lr, epoches, balanced):
     data['drop_rate'] = drop_rate[0]
     data['batch_size'] = batch_size[0]
     data['lr'] = lr[0]
-    data['epochs'] = epoches[0]
+    data['epochs'] = epochs[0]
     data['balanced'] = balanced[0]
     #data[''] =
 

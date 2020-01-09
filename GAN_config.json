@@ -1,13 +1,13 @@
 {
-    "Data_dir": "/data/datasets/ADNI_NoBack/", 
-    "batch_size": 10, 
-    "G_fil_num": 5, 
+    "G_lr": 0.09254187782275038, 
     "D_fil_num": 5, 
-    "epochs": 300, 
+    "Data_dir": "/data/datasets/ADNI_NoBack/", 
+    "D_lr": 0.1, 
+    "L1_norm_factor": 97, 
+    "batch_size": 9, 
+    "epochs": 74, 
     "balanced": 0, 
-    "G_lr": 0.0001, 
-    "D_lr": 0.0002, 
+    "G_fil_num": 20, 
     "drop_rate": 0, 
-    "checkpoint_dir": "../model_checkpoint/", 
-    "L1_norm_factor": 10
+    "checkpoint_dir": "../model_checkpoint/"
 }
