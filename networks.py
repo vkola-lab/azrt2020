@@ -1,12 +1,13 @@
 import os
-from models import Vanila_CNN, Vanila_CNN_Lite, _netD, _netG
-from utils import *
-from dataloader import Data, GAN_Data
 import torch
 import torch.nn as nn
-from torch.utils.data import Dataset, DataLoader
 import torch.optim as optim
+from torch.utils.data import Dataset, DataLoader
+from dataloader import Data, GAN_Data
+from models import Vanila_CNN, Vanila_CNN_Lite, _netD, _netG
+from utils import *
 from tqdm import tqdm
+from visual import GAN_test_plot
 
 """
 1. augmentation, small rotation,
@@ -132,7 +133,7 @@ class GAN:
                           {'params': self.netG.conv3.parameters(), 'lr': 0.1*self.G_lr},
                           {'params': self.netG.BN1.parameters(), 'lr':self.G_lr},
                           {'params': self.netG.BN2.parameters(), 'lr':self.G_lr},
-                        ], lr=self.G_lr, momentum=0.9)
+                        ], lr=self.G_lr, momentum=0.9) #Why this, not model.parameters()?
         self.optimizer_D = optim.Adam(self.netD.parameters(), lr=self.D_lr, betas=(0.5, 0.999))
         self.criterion = nn.BCELoss().cuda()
         self.valid_optimal_metric, self.optimal_epoch = 0, -1
@@ -147,7 +148,9 @@ class GAN:
     def train_model_epoch(self):
         self.netG.train(True)
         self.netD.train(True)
-        label = torch.FloatTensor(self.config["batch_size"])
+        #Error may raise when input is actually smaller than batch size
+        #Currently fixed by using real time size. Or can fix by discard small input
+        #label = torch.FloatTensor(self.config["batch_size"])
         for idx, (inputs_lo, inputs_hi) in enumerate(self.train_dataloader):
             inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
             # get gradient for D network with fake data
@@ -155,6 +158,7 @@ class GAN:
             Mask = self.netG(inputs_lo)
             Output = inputs_lo + Mask
             Foutput = self.netD(Output.detach())
+            label = torch.FloatTensor(Foutput.shape[0])
             Flabel = label.fill_(0).cuda()
             loss_D_F = self.criterion(Foutput, Flabel)
             loss_D_F.backward()
@@ -190,6 +194,8 @@ class GAN:
                 output = inputs_lo + Mask
                 ssim = SSIM(inputs_hi.squeeze().numpy(), output.squeeze().cpu().numpy())
                 valid_metric.append(ssim)
+
+        #Consider return classification accuracy | weighted average of accuracy & SSIM (need discuss)
         return sum(valid_metric) / len(valid_metric)
 
     def get_checkpoint_dir(self):
@@ -209,15 +215,32 @@ class GAN:
             torch.save(self.netG.state_dict(), '{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
 
     def test(self):
-        self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, self.epoch)))
+        # Need test, partially completed
+        print('preparing testing results...')
+        self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))) #use optimal_epoch instead of epoch
         with torch.no_grad():
             self.netG.train(False)
             test_matrix = [[0, 0], [0, 0]]
-            for inputs_lo, inputs_hi in self.test_dataloader:
+            # do some plots and post analysis
+            for idx, (inputs_lo, inputs_hi) in enumerate(self.test_dataloader):
                 inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
-                # do some plots and post analysis
+                Mask = self.netG(inputs_lo)
+                output = inputs_lo + Mask
+
+                out_dir = '../Test_GAN/'
+                inputs_lo = inputs_lo.cpu().squeeze().numpy()
+                output = output.cpu().squeeze().numpy()
+                inputs_hi = inputs_hi.cpu().squeeze().numpy()
+                GAN_test_plot(out_dir, idx, inputs_lo, output, inputs_hi)
+                # Do we need ssim in figure?
+                ssim_ori = SSIM(inputs_hi, inputs_lo) #Does the order matter?
+                ssim_gen = SSIM(inputs_hi, output)
+                out_string = 'ssim between 1.5T and 3T is:', ssim_ori, '\nssim between 1.5T+ and 3T is:', ssim_gen
+                save_list(out_dir, str(idx)+'.txt', out_string)
+        print('Done. Results saved in', out_dir)
 
 
 if __name__ == "__main__":
-    gan = GAN('./GAN_config.json', 1000)
+    gan = GAN('./GAN_config_optimal.json', 1)
     gan.train()
+    gan.test()

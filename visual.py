@@ -83,6 +83,53 @@ def bold_axs_stick(axs, fontsize):
         tick.label1.set_fontsize(fontsize)
         tick.label1.set_fontweight('bold')
 
+def GAN_test_plot(out_dir, id, img1, mask, img3):
+    img15 = img1
+    imgp = img1 + mask
+    img3 = img3
+    plt.set_cmap("gray")
+    plt.subplots_adjust(wspace=0.3, hspace=0.3)
+    fig, axs = plt.subplots(3, 3, figsize=(20,15))
+    side_a = 100
+    side_b = 160
+    axs[0, 0].imshow(img15[:, :, 105].T, vmin=-1, vmax=2.5)
+    axs[0, 0].set_title('1.5T', fontsize=25)
+    axs[0, 0].axis('off')
+    axs[1, 0].imshow(img3[:, :, 105].T, vmin=-1, vmax=2.5)
+    axs[1, 0].set_title('3T', fontsize=25)
+    axs[1, 0].axis('off')
+    axs[2, 0].imshow(imgp[:, :, 105].T, vmin=-1, vmax=2.5)
+    axs[2, 0].set_title('1.5T+', fontsize=25)
+    axs[2, 0].axis('off')
+
+    axs[0, 1].imshow(img15[side_a:side_b, side_a:side_b, 105].T, vmin=-1, vmax=2.5)
+    axs[0, 1].set_title('1.5T zoom in', fontsize=25)
+    axs[0, 1].axis('off')
+    axs[1, 1].imshow(img3[side_a:side_b, side_a:side_b, 105].T, vmin=-1, vmax=2.5)
+    axs[1, 1].set_title('3T zoom in', fontsize=25)
+    axs[1, 1].axis('off')
+    axs[2, 1].imshow(imgp[side_a:side_b, side_a:side_b, 105].T, vmin=-1, vmax=2.5)
+    axs[2, 1].set_title('1.5T+ zoom in', fontsize=25)
+    axs[2, 1].axis('off')
+
+    axs[0, 2].hist(img15[side_a:side_b, side_a:side_b, 105].T.flatten(), bins=50, range=(0, 1.8))
+    bold_axs_stick(axs[0, 2], 16)
+    axs[0, 2].set_xticks([0, 0.5, 1, 1.5])
+    axs[0, 2].set_yticks([0, 100, 200, 300])
+    axs[0, 2].set_title('1.5T voxel histogram', fontsize=25)
+    axs[1, 2].hist(img3[side_a:side_b, side_a:side_b, 105].T.flatten(), bins=50, range=(0, 1.8))
+    bold_axs_stick(axs[1, 2], 16)
+    axs[1, 2].set_xticks([0, 0.5, 1, 1.5])
+    axs[1, 2].set_yticks([0, 100, 200, 300])
+    axs[1, 2].set_title('3T voxel histogram', fontsize=25)
+    axs[2, 2].hist(imgp[side_a:side_b, side_a:side_b, 105].T.flatten(), bins=50, range=(0, 1.8))
+    bold_axs_stick(axs[1, 2], 16)
+    axs[2, 2].set_xticks([0, 0.5, 1, 1.5])
+    axs[2, 2].set_yticks([0, 100, 200, 300])
+    axs[2, 2].set_title('1.5T+ voxel histogram', fontsize=25)
+    plt.savefig(out_dir + '{}.png'.format(id), dpi=150)
+    plt.close()
+
 def MRI_slice_plot(out_dir, mri_low, mri_high):
     img15 = np.load(mri_low)
     img3 = np.load(mri_high)
@@ -137,4 +184,3 @@ def all_mri_plot(path, txt_low, txt_high):
 if __name__ == "__main__":
     # ROC_plot('../model_checkpoint/ADNI_3T_NL_ADNI_3T_AD_balance0/')
     all_mri_plot('/data/datasets/ADNI_NoBack/', 'ADNI_1.5T_GAN_AD.txt', 'ADNI_3T_AD.txt')
-
