@@ -11,7 +11,7 @@ import copy
 
 """
 to do list:
-    1. to make the dataloader work, create shuffled filename.txt and label.txt 
+    1. to make the dataloader work, create shuffled filename.txt and label.txt
     2. save different version for MRI scans: clip or background remove
     3. for those 82 cases, 1.5T has inconsistency between data/datasets/ADNI and /data/MRI_GAN/
     4. in filename.txt maybe put complete path of data, no need to assign data_dir
@@ -40,6 +40,8 @@ class Data(Dataset):
             self.index_list = idxs[split1:split2]
         elif self.stage == 'test':
             self.index_list = idxs[split2:]
+        elif self.stage == 'all':
+            self.index_list = idxs
         else:
             raise ValueError('invalid stage setting')
 
@@ -50,7 +52,7 @@ class Data(Dataset):
         index = self.index_list[idx]
         label = self.Label_list[index]
         data = np.load(self.Data_dir + self.Data_list[index]).astype(np.float32)
-        data = np.expand_dims(data, axis=0) 
+        data = np.expand_dims(data, axis=0)
         return data, label
 
     def get_sample_weights(self):
@@ -84,7 +86,7 @@ class PatchGenerator:
             x, y, z = loc
             patch = data[x:x+47, y:y+47, z:z+47]
             patches.append(np.expand_dims(patch, axis = 0))
-        return patches 
+        return patches
 
 
 class GAN_Data:
@@ -97,7 +99,7 @@ class GAN_Data:
     Todo;
     1. selectively pick good quality 3T image based on non-reference image quality
     2. G model evaluation, what validation loss to use? maybe SSIM
-    3.  
+    3.
     """
 
     def __init__(self, Data_dir, stage, ratio=(0.6, 0.2, 0.2), seed=1000):
@@ -111,6 +113,7 @@ class GAN_Data:
         Data_list5 = read_txt('../lookuptxt/', 'ADNI_3T_AD.txt')
         self.Data_list_lo = Data_list0 + Data_list1 + Data_list2
         self.Data_list_hi = Data_list3 + Data_list4 + Data_list5
+        self.Label_list = [0]*len(Data_list0) + [2]*len(Data_list1) + [1]*len(Data_list2)
         self.stage = stage
         self.length = len(self.Data_list_lo)
         self.patchsampler = PatchGenerator(patch_size = 47)
@@ -135,17 +138,23 @@ class GAN_Data:
         data_hi = np.load(self.Data_dir + self.Data_list_hi[index]).astype(np.float32)
         if self.stage == 'train':
             patch_lo, patch_hi = self.patchsampler.random_sample(data_lo, data_hi)
-            return np.expand_dims(patch_lo, axis=0), np.expand_dims(patch_hi, axis=0)
+            return np.expand_dims(patch_lo, axis=0), np.expand_dims(patch_hi, axis=0), self.Label_list[index]
         else:
-            return np.expand_dims(data_lo, axis=0), np.expand_dims(data_hi, axis=0)
-            
+            return np.expand_dims(data_lo, axis=0), np.expand_dims(data_hi, axis=0), self.Label_list[index]
+
 
 if __name__ == "__main__":
     dataset = GAN_Data(Data_dir='/data/datasets/ADNI_NoBack/', stage='test')
-    for i in range(len(dataset)):
-        scan1, scan2 = dataset[i]
-        print(scan1.shape, scan2.shape)
-        
+    dataloader = DataLoader(dataset, batch_size=10)
+    for scan1, scan2, label in dataloader:
+        print(scan1.shape, scan2.shape, label.shape)
+        numpy_label = label.numpy()
+        index = torch.LongTensor(np.argwhere(numpy_label!=2).squeeze())
+        print(label, index)
+        selected_scan = torch.index_select(scan1, 0, index)
+        selected_label = torch.index_select(label, 0, index)
+        print(selected_scan.shape, selected_label)
+
     # dataset = Data(Data_dir='/data/datasets/ADNI_NoBack/', class1='ADNI_1.5T_GAN_NL', class2='ADNI_1.5T_GAN_AD', stage='train')
     # labels = []
     # print(dataset.get_sample_weights())
@@ -156,6 +165,3 @@ if __name__ == "__main__":
     # dataloader = DataLoader(dataset, batch_size=10, shuffle=True, drop_last=True)
     # for scan, label in dataloader:
     #     print(scan.shape, label)
-
-
-

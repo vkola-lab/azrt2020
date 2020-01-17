@@ -1,1 +1,0 @@
-{"Data_dir": "/data/datasets/ADNI_NoBack/", "balanced":0, "fil_num":10, "drop_rate":0.5, "batch_size": 10, "lr": 0.001, "epochs": 200, "class1": "ADNI_1.5T_NL", "class2": "ADNI_1.5T_AD", "checkpoint_dir": "../model_checkpoint/"}

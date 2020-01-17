@@ -1,7 +1,7 @@
 {
     "language"        : "PYTHON",
     "main-file"       : "gan_spearmint.py",
-    "experiment-name" : "GAN3",
+    "experiment-name" : "GAN5",
     "likelihood"      : "GAUSSIAN",
     "variables" : {
         "batch_size" : {
@@ -47,10 +47,10 @@
             "max"  : 0.1
         },
         "drop_rate" : {
-            "type" : "INT",
+            "type" : "FLOAT",
             "size" : 1,
-            "min"  : 0,
-            "max"  : 1
+            "min"  : 0.0,
+            "max"  : 1.0
         },
         "L1_norm_factor" : {
             "type" : "INT",

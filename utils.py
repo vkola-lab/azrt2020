@@ -7,20 +7,32 @@ from numpy import random
 import json
 from skimage import img_as_float
 from skimage.metrics import structural_similarity as ssim
+import sys
 
-def SSIM(tensors1, tensors2):
+def SSIM(tensor1, tensor2):
     ssim_list = []
-    for i in range(tensors1.shape[0]):
-        tensor1, tensor2 = tensors1[i], tensors2[i]
-        for slice_idx in [50, 80, 110, 140]:
-            img1, img2 = tensor1[slice_idx], tensor2[slice_idx]
-            ssim_val = ssim(img1, img2, data_range=max(img1.max(), img2.max()) - min(img1.min(), img2.min()))
-            ssim_list.append(ssim_val)
+    for slice_idx in [50, 80, 110, 140]:
+        img1, img2 = tensor1[slice_idx, :, :], tensor2[slice_idx, :, :]
+        img1 = img_as_float(img1)
+        img2 = img_as_float(img2)
+        rg = img2.max() - img2.min()
+        #print(rg)
+        ssim_val = ssim(img1, img2)#, data_range=rg) #don't add data range, cause error.
+        if ssim_val != ssim_val:
+            print(ssim_val)
+            print(ssim_val2)
+            print(img1.shape)
+            print(img2.shape)
+            print('\n\n')
+            #print(img2)
+            sys.exit()
+        ssim_list.append(ssim_val)
     ssim_avg = sum(ssim_list) / len(ssim_list)
+    #print(ssim_avg, slice_idx)
     return ssim_avg
 
 def read_json(config_file):
-    with open(config_file) as config_buffer:    
+    with open(config_file) as config_buffer:
         config = json.loads(config_buffer.read())
     return config
 
@@ -190,4 +202,3 @@ def test_2(item, ittt, df=1):
 
 if __name__ == "__main__":
     test(item=3, ittt='a', whole=3)
-

@@ -83,9 +83,9 @@ def bold_axs_stick(axs, fontsize):
         tick.label1.set_fontsize(fontsize)
         tick.label1.set_fontweight('bold')
 
-def GAN_test_plot(out_dir, id, img1, mask, img3):
+def GAN_test_plot(out_dir, id, img1, output, img3):
     img15 = img1
-    imgp = img1 + mask
+    imgp = output
     img3 = img3
     plt.set_cmap("gray")
     plt.subplots_adjust(wspace=0.3, hspace=0.3)

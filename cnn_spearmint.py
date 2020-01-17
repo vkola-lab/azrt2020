@@ -10,7 +10,7 @@ def read_json(config_file):
 
 def function(fil_num, drop_rate, batch_size, lr, epochs, balanced):
 
-    filename = 'configuration_1.5T.json'
+    filename = 'cnn_config_1.5T.json'
     #filename = 'configuration.json'
 
     data = read_json(filename)
@@ -27,7 +27,7 @@ def function(fil_num, drop_rate, batch_size, lr, epochs, balanced):
     with open(filename, 'w') as f:
         json.dump(data, f, indent=4)
 
-    command = ['/home/sq/.conda/envs/RL/bin/python', 'main.py', filename]
+    command = ['/home/sq/.conda/envs/RL/bin/python', 'cnn_main.py', filename]
 
     output = subprocess.Popen(command, stdout=subprocess.PIPE)
     val = str(output.communicate()[0])

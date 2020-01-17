@@ -14,4 +14,4 @@ mongod --fork --logpath mongodb/log/log1.txt --dbpath mongodb/dbfolder/
 #rm    mongodb/log/log3.txt
 #mongod --fork --logpath mongodb/log/log_3.txt --dbpath mongodb/dbfolder3/
 
-python2 Spearmint/spearmint/main.py ./
+python2 Spearmint/spearmint/main.py --config cnn_spear_config.json ./
