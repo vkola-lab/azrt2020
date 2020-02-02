@@ -10,7 +10,7 @@ def read_json(config_file):
 
 def function(fil_num, drop_rate, batch_size, lr, epochs, balanced):
 
-    filename = 'cnn_config_1.5T.json'
+    filename = 'cnn_config_1.5TP.json'
     #filename = 'configuration.json'
 
     data = read_json(filename)

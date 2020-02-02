@@ -25,6 +25,5 @@ def main(filename):
 if __name__ == '__main__':
     filename = sys.argv[1]
     #with torch.cuda.device(0):
-    with torch.cuda.device(2):
+    with torch.cuda.device(3):
         main(filename)
-    

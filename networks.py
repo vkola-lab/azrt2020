@@ -48,7 +48,7 @@ class CNN:
         self.test_dataloader = DataLoader(Data(self.config['Data_dir'], self.config['class1'], self.config['class2'], seed=seed, stage='test'),
                                            batch_size=self.config['batch_size'], shuffle=True)
 
-    def train(self):
+    def train(self, verbose=2):
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config['lr'], betas=(0.5, 0.999))
         self.criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1, self.imbalanced_ratio])).cuda()
         self.optimal_valid_matrix = [[0,0],[0,0]]
@@ -56,9 +56,11 @@ class CNN:
         for epoch in range(self.config['epochs']):
             self.train_model_epoch()
             valid_matrix = self.valid_model_epoch()
-            print('This epoch validation confusion matrix:', valid_matrix, 'validation_accuracy:', "%.4f" % get_accu(valid_matrix))
+            if verbose > 1:
+                print('This epoch validation confusion matrix:', valid_matrix, 'validation_accuracy:', "%.4f" % get_accu(valid_matrix))
             self.save_checkpoint(valid_matrix, epoch)
-        print('(CNN) Best validation accuracy saved at the {}th epoch:'.format(self.epoch), self.valid_optimal_accu, self.valid_optimal_matrix)
+        if verbose > 0:
+            print('(CNN) Best validation accuracy saved at the {}th epoch:'.format(self.epoch), self.valid_optimal_accu, self.valid_optimal_matrix)
         return self.valid_optimal_accu
 
     def test(self):
@@ -122,7 +124,7 @@ class GAN:
         self.netD = _netD(self.config["D_fil_num"]).cuda()
         self.cnn  = CNN('./cnn_config_1.5T_optimal.json', 0)
         self.cnn.model.train(False)
-        self.cnn.epoch=190
+        self.cnn.epoch=117
         self.cnn.model.load_state_dict(torch.load('{}CNN_{}.pth'.format(self.cnn.checkpoint_dir, self.cnn.epoch)))
 
         self.checkpoint_dir = self.config["checkpoint_dir"] + 'gan/'
@@ -328,10 +330,53 @@ class GAN:
         print('\t1.5  & 3:', mean(ssim_oris))
         print('\t1.5+ & 3:', mean(ssim_gens))
 
-    def generate(self, source_dir, target_dir):
-        dl = DataLoader(Data(source_dir, stage='all'), batch_size=self.config['batch_size'])
+    def generate(self):
+        # generate & save 1.5T+ images using MRIGAN
+        sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/FHS_NoBack/", "/data/datasets/AIBL_NoBack/"]
+        targets = ["/data/datasets/ADNIP_NoBack/", "/data/datasets/NACCP_NoBack/", "/data/datasets/FHSP_NoBack/", "/data/datasets/AIBLP_NoBack/"]
 
-        print('Done')
+        #data = Data('AIBL_NoBack', class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all')
+        data = []
+        data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
+        data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
+        data += [Data(sources[2], class1='FHS_1.5T_NL', class2='FHS_1.5T_AD', stage='all', shuffle=False)]
+        data += [Data(sources[3], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
+        dataloaders = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
+        Data_lists = [d.Data_list for d in data]
+        print('Generating 1.5T+ images for datasets: ADNI, NACC, FHS, AIBL')
+
+        with torch.no_grad():
+            self.netG.train(False)
+            for i in range(len(dataloaders)):
+                dataloader = dataloaders[i]
+                target = targets[i]
+                Data_list = Data_lists[i]
+                for j, (input, label) in enumerate(dataloader):
+                    input = input.cuda()
+                    mask = self.netG(input)
+                    output = input + mask
+                    np.save(target+Data_list[j], output.data.cpu().numpy().squeeze())
+
+        print('Generation completed!')
+
+        '''
+        print('testing now!')
+        data = Data(targets[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)
+        data = Data(targets[2], class1='FHS_1.5T_NL', class2='FHS_1.5T_AD', stage='all', shuffle=False)
+        data = Data(targets[3], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)
+        data = DataLoader(data, batch_size=1, shuffle=False)
+
+        with torch.no_grad():
+            self.cnn.model.train(False)
+            for i, (input, label) in enumerate(data):
+                input = input.cuda()
+                pred = self.cnn.model(input)
+                print(pred)
+                break
+            sys.exit()
+        '''
+
+
 
 if __name__ == "__main__":
     gan = GAN('./gan_config_optimal.json', 0)

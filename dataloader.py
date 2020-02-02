@@ -22,7 +22,7 @@ class Data(Dataset):
     txt files ./lookuptxt/*.txt complete path of MRIs
     MRI with clip and backremove: /data/datasets/ADNI_NoBack/*.npy
     """
-    def __init__(self, Data_dir, class1, class2, stage, ratio=(0.6, 0.2, 0.2), seed=1000):
+    def __init__(self, Data_dir, class1, class2, stage, ratio=(0.6, 0.2, 0.2), seed=1000, shuffle=True):
         random.seed(seed)
         self.Data_dir = Data_dir
         Data_list0 = read_txt('../lookuptxt/', class1 + '.txt')
@@ -32,7 +32,8 @@ class Data(Dataset):
         self.stage = stage
         self.length = len(self.Data_list)
         idxs = list(range(self.length))
-        random.shuffle(idxs)
+        if shuffle:
+            random.shuffle(idxs)
         split1, split2 = int(self.length*ratio[0]), int(self.length*(ratio[0]+ratio[1]))
         if self.stage == 'train':
             self.index_list = idxs[:split1]
