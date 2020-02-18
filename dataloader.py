@@ -127,6 +127,8 @@ class GAN_Data:
             self.index_list = idxs[split1:split2]
         elif self.stage == 'test':
             self.index_list = idxs[split2:]
+        elif self.stage == 'all':
+            self.index_list = idxs
         else:
             raise ValueError('invalid stage setting')
 

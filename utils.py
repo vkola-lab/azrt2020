@@ -1,5 +1,6 @@
 import numpy as np
 import torch
+import matlab
 import torch.nn as nn
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
@@ -8,27 +9,153 @@ import json
 from skimage import img_as_float
 from skimage.metrics import structural_similarity as ssim
 import sys
+from scipy import stats
+from sklearn.metrics import precision_recall_fscore_support
 
-def SSIM(tensor1, tensor2):
+
+'''
+ori = [[0.95343137, 0.83752094, 0.84259259, 0.87958115],
+       [0.94852941, 0.86934673, 0.86111111, 0.86910995],
+       [0.94362745, 0.85092127, 0.77777778, 0.85078534],
+       [0.94362745, 0.84254606, 0.87037037, 0.84554974],
+       [0.94852941, 0.7319933,  0.75,       0.87958115]]
+gen = [0.94362745, 0.86599665, 0.84259259, 0.89790576],
+       [0.93137255, 0.84087102, 0.78703704, 0.86649215],
+       [0.93382353, 0.82579564, 0.75,       0.87434555],
+       [0.95833333, 0.85092127, 0.80555556, 0.89005236],
+       [0.94852941, 0.86097152, 0.7962963,  0.89005236]]
+ori = [[0.93382353, 0.81742044, 0.80555556, 0.88481675,],
+       [0.94607843, 0.82077052, 0.76851852, 0.88219895,],
+       [0.94117647, 0.84589615, 0.85185185, 0.81413613,],
+       [0.93382353, 0.78224456, 0.75,       0.84816754,],
+       [0.94362745, 0.74874372, 0.74074074, 0.83246073,]]
+
+gen = [[0.95588235, 0.86097152, 0.73148148, 0.87958115,],
+       [0.94607843, 0.80234506, 0.64814815, 0.82984293,],
+       [0.95098039, 0.83249581, 0.87037037, 0.82984293,],
+       [0.94362745, 0.77721943, 0.80555556, 0.85602094,],
+       [0.94852941, 0.85929648, 0.7962963,  0.86649215,]]
+
+ori = np.asarray(ori)
+gen = np.asarray(gen)
+
+
+for i in range(4):
+    o = ori[:, i]
+    g = gen[:, i]
+    # print(o)
+    # print(g)
+    print('1.5  mean:', np.mean(o), 'std:', np.std(o))
+    print('1.5+ mean:', np.mean(g), 'std:', np.std(g))
+    t, p = stats.ttest_ind(o, g, equal_var = False)
+    print('p_value:', p)
+#'''
+
+def immse(tensor1, tensor2, zoom, eng):
+    vals = []
+    for slice_idx in [50, 80, 110]:
+        if zoom:
+            side_a = slice_idx
+            side_b = slice_idx+60
+            img1, img2 = tensor1[side_a:side_b, side_a:side_b, 105], tensor2[side_a:side_b, side_a:side_b, 105]
+        else:
+            img1, img2 = tensor1[slice_idx, :, :], tensor2[slice_idx, :, :]
+        img1, img2 = matlab.double(img1.tolist()), matlab.double(img2.tolist())
+        val = eng.immse(img1, img2)
+        vals.append(val)
+    val_avg = sum(vals) / len(vals)
+    return val_avg
+
+def psnr(tensor1, tensor2, zoom, eng):
+    #all are single slice!
+    vals = []
+    for slice_idx in [50, 80, 110]:
+        if zoom:
+            side_a = slice_idx
+            side_b = slice_idx+60
+            img1, img2 = tensor1[side_a:side_b, side_a:side_b, 105], tensor2[side_a:side_b, side_a:side_b, 105]
+        else:
+            img1, img2 = tensor1[slice_idx, :, :], tensor2[slice_idx, :, :]
+        img1, img2 = matlab.double(img1.tolist()), matlab.double(img2.tolist())
+        val = eng.psnr(img1, img2)
+        vals.append(val)
+    val_avg = sum(vals) / len(vals)
+    return val_avg
+
+def brisque(tensor, zoom, eng):
+    vals = []
+    for slice_idx in [50, 80, 110]:
+        if zoom:
+            side_a = slice_idx
+            side_b = slice_idx+60
+            img = tensor[side_a:side_b, side_a:side_b, 105]
+        else:
+            img = tensor[slice_idx, :, :]
+        img = matlab.double(img.tolist())
+        val = eng.brisque(img)
+        vals.append(val)
+    val_avg = sum(vals) / len(vals)
+    return val_avg
+
+def niqe(tensor, zoom, eng):
+    vals = []
+    for slice_idx in [50, 80, 110]:
+        if zoom:
+            side_a = slice_idx
+            side_b = slice_idx+60
+            img = tensor[side_a:side_b, side_a:side_b, 105]
+        else:
+            img = tensor[slice_idx, :, :]
+        img = matlab.double(img.tolist())
+        val = eng.niqe(img)
+        vals.append(val)
+    val_avg = sum(vals) / len(vals)
+    return val_avg
+
+def piqe(tensor, zoom, eng):
+    vals = []
+    for slice_idx in [50, 80, 110]:
+        if zoom:
+            side_a = slice_idx
+            side_b = slice_idx+60
+            img = tensor[side_a:side_b, side_a:side_b, 105]
+        else:
+            img = tensor[slice_idx, :, :]
+        img = matlab.double(img.tolist())
+        val = eng.piqe(img)
+        vals.append(val)
+    val_avg = sum(vals) / len(vals)
+    return val_avg
+
+def report(y_true, y_pred):
+    p, r, f, s = precision_recall_fscore_support(y_true, y_pred)
+    #print(p[0], r[0], f[0], s[0])
+    #print(p[1], r[1], f[1], s[1])
+    #out = classification_report(y_true, y_pred)
+    #print(out)
+    return (p[0], r[0], f[0], s[0])
+
+def p_val(o, g):
+    t, p = stats.ttest_ind(o, g, equal_var = True)
+    return p
+
+def SSIM(tensor1, tensor2, zoom=False):
     ssim_list = []
     for slice_idx in [50, 80, 110, 140]:
-        img1, img2 = tensor1[slice_idx, :, :], tensor2[slice_idx, :, :]
+        if zoom:
+            side_a = slice_idx
+            side_b = slice_idx+60
+            img1, img2 = tensor1[side_a:side_b, side_a:side_b, 105], tensor2[side_a:side_b, side_a:side_b, 105]
+        else:
+            img1, img2 = tensor1[slice_idx, :, :], tensor2[slice_idx, :, :]
         img1 = img_as_float(img1)
         img2 = img_as_float(img2)
-        rg = img2.max() - img2.min()
-        #print(rg)
-        ssim_val = ssim(img1, img2)#, data_range=rg) #don't add data range, cause error.
+        ssim_val = ssim(img1, img2)
         if ssim_val != ssim_val:
-            print(ssim_val)
-            print(ssim_val2)
-            print(img1.shape)
-            print(img2.shape)
-            print('\n\n')
-            #print(img2)
+            print('\n\n Error @ SSIM')
             sys.exit()
         ssim_list.append(ssim_val)
     ssim_avg = sum(ssim_list) / len(ssim_list)
-    #print(ssim_avg, slice_idx)
     return ssim_avg
 
 def read_json(config_file):
