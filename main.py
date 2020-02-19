@@ -23,8 +23,12 @@ def gan_main():
     #     gan.eval_iqa_all(zoom=False, metric=m)
     #     gan.eval_iqa_all(zoom=True, metric=m)
     # gan.test(zoom=True, metric='piqe')
-    #gan.generate()
-
+    gan.generate() # create 1.5T+ numpy array
+    gan.eval_iqa_all(metric='brisque') # create brisque (3, 10) tensor
+    gan.eval_iqa_all(metric='niqe')
+    gan.table()
+    gan_boxplot()
+    
 
 def cnn_main(repe_time, model_name, cnn_setting):
     for exp_idx in range(repe_time):

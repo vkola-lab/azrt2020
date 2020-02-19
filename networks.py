@@ -279,18 +279,47 @@ class GAN:
         for self.epoch in range(self.config['epochs']):
             self.train_model_epoch()
             valid_metric = self.valid_model_epoch()
-            print('epoch', self.epoch, 'values:')
-            print('\tTraining set\'s SSIM:', valid_metric)
-            self.save_checkpoint(valid_metric)
+            # print('epoch', self.epoch, 'values:')
+            # print('\tTraining set\'s SSIM:', valid_metric)
             if self.epoch % 20 == 0:
                 self.validate()
+                self.save_checkpoint(valid_metric)
 
         # print('(GAN) Best validation metric at the {}th epoch:'.format(self.optimal_epoch), self.valid_optimal_metric)
         return self.valid_optimal_metric
 
+    def generate(self):
+        # generate & save 1.5T+ images using MRIGAN
+        sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/AIBL_NoBack/"]
+        targets = ["/data/datasets/ADNIP_NoBack/", "/data/datasets/NACCP_NoBack/", "/data/datasets/AIBLP_NoBack/"]
+
+        data = []
+        data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
+        data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
+        data += [Data(sources[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
+        dataloaders = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
+        Data_lists = [d.Data_list for d in data]
+        # print('Generating 1.5T+ images for datasets: ADNI, NACC, FHS, AIBL')
+
+        with torch.no_grad():
+            self.netG.train(False)
+            for i in range(len(dataloaders)):
+                dataloader = dataloaders[i]
+                target = targets[i]
+                Data_list = Data_lists[i]
+                for j, (input, label) in enumerate(dataloader):
+                    input = input.cuda()
+                    mask = self.netG(input)
+                    output = input + mask
+                    if not os.path.isdir(target):
+                        os.mkdir(target)
+                    np.save(target+Data_list[j], output.data.cpu().numpy().squeeze())
+
+        # print('Generation completed!')
+
     def validate(self, plot=True, zoom=False):
         eng = matlab.engine.start_matlab()
-        print('#########Preparing validation results...#########')
+        # print('#########Preparing validation results...#########')
         with torch.no_grad():
             self.netG.train(False)
             # do some plots and post analysis
@@ -298,8 +327,6 @@ class GAN:
             iqa_gens = []
             iqa_3s = []
             for idx, (inputs_lo, inputs_hi, label) in enumerate(self.valid_dataloader):
-                if label[0] == 2:
-                    continue
                 inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
                 Mask = self.netG(inputs_lo)
                 output = inputs_lo + Mask
@@ -336,30 +363,8 @@ class GAN:
                 if plot:
                     GAN_test_plot(out_dir, idx, inputs_lo, output, inputs_hi, out_string)
 
-            # print('1.5+ accu:', accuracy_score(labels, pred_gens))
-            # print('1.5  accu:', accuracy_score(labels, pred_oris))
-            # print('3.0  accu:', accuracy_score(labels, pred_tars))
-            # print(len(labels))
-            # print(np.asarray(preds))
-        print('Done. Results saved in', out_dir)
-        '''
-        print('Average '+metric+':')
-        if len(iqa_3s) != 0:
-            print('\t1.5 :', mean(iqa_oris))
-            print('\t1.5+:', mean(iqa_gens))
-            print('\t3   :', mean(iqa_3s))
-        else:
-            print('\t1.5  & 3:', mean(iqa_oris))
-            print('\t1.5+ & 3:', mean(iqa_gens))
-        '''
+        # print('Done. Results saved in', out_dir)
         eng.quit()
-
-# numpy_label = label.numpy()
-# index = torch.LongTensor(np.argwhere(numpy_label!=2).squeeze())
-# print(label, index)
-# selected_scan = torch.index_select(scan1, 0, index)
-# selected_label = torch.index_select(label, 0, index)
-# print(selected_scan.shape, selected_label)
 
     def train_model_epoch(self):
         self.netG.train(True)
@@ -368,28 +373,6 @@ class GAN:
         #Currently fixed by using real time size. Or can fix by discard small input
         #label = torch.FloatTensor(self.config["batch_size"])
         for idx, (inputs_lo, inputs_hi, label) in enumerate(self.train_dataloader):
-
-            #for GAN later use, no use for now
-            # modified = False
-            # if modified:
-            #     for i in range (len(labels)):
-            #         inputs_lo_cnn = []
-            #         inputs_hi_cnn = []
-            #         labels_cnn = []
-            #         inputs_lo_d = []
-            #         inputs_hi_d = []
-            #         labels_d = []
-            #         if labels[i] != 2:
-            #             #set consisting AD & NI, gen also get retruns from classifier
-            #             inputs_lo_cnn.append(inputs_lo[i])
-            #             inputs_hi_cnn.append(inputs_lo[i])
-            #             labels_cnn.append(labels[i])
-            #         else:
-            #             #set consisting MCI, gen get returns from des
-            #             inputs_lo_d.append(inputs_lo[i])
-            #             inputs_hi_d.append(inputs_lo[i])
-            #             labels_d.append(labels[i])
-
             inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
             # get gradient for D network with fake data
             self.netD.zero_grad()
@@ -440,25 +423,7 @@ class GAN:
                 output = inputs_lo + Mask
                 ssim = SSIM(output.squeeze().cpu().numpy(), inputs_hi.squeeze().numpy())
                 valid_metric.append(ssim)
-
         return sum(valid_metric) / len(valid_metric)
-
-    # def valid_model_epoch(self):
-    #     with torch.no_grad():
-    #         self.netG.train(False)
-    #         valid_metric = []
-    #         for inputs_lo, inputs_hi, label in self.valid_dataloader:
-    #             inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
-    #             Mask = self.netG(inputs_lo)
-    #             output = inputs_lo + Mask
-    #
-    #             #need classifier, 1.5T
-    #             #cnn = configuration_1.5T_optimal.json
-    #             pred = classifier(output)
-    #             valid_metric.append(pred==label)
-    #
-    #     #return classification accuracy
-    #     return sum(valid_metric) / len(valid_metric)
 
     def get_checkpoint_dir(self):
         return self.checkpoint_dir
@@ -476,7 +441,7 @@ class GAN:
                         except:
                             pass
             torch.save(self.netG.state_dict(), '{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
-            print('model saved in', self.checkpoint_dir)
+            # print('model saved in', self.checkpoint_dir)
 
 # a = a[:,:,105]
 #
@@ -566,70 +531,6 @@ class GAN:
             print('\t1.5+ & 3:', mean(iqa_gens))
         eng.quit()
 
-    def eval_iqa(self, zoom=False, metric='ssim'):
-        eng = matlab.engine.start_matlab()
-        print('Evaluating IQA results:')
-        self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))) #use optimal_epoch instead of epoch
-        with torch.no_grad():
-            self.netG.train(False)
-            iqa_oris = []
-            iqa_gens = []
-            iqa_3s = []
-            d = DataLoader(GAN_Data(self.config['Data_dir'], stage='all'), batch_size=1, shuffle=True)
-            for idx, (inputs_lo, inputs_hi, label) in enumerate(d):
-                inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
-                Mask = self.netG(inputs_lo)
-                output = inputs_lo + Mask
-
-                inputs_lo = inputs_lo.cpu().squeeze().numpy()
-                output    = output.cpu().squeeze().numpy()
-                inputs_hi = inputs_hi.cpu().squeeze().numpy()
-
-                if metric == 'ssim':
-                    iqa_gen = SSIM(output, inputs_hi, zoom)
-                    iqa_ori = SSIM(inputs_lo, inputs_hi, zoom)
-                elif metric == 'immse':
-                    iqa_gen = immse(output, inputs_hi, zoom, eng)
-                    iqa_ori = immse(inputs_lo, inputs_hi, zoom, eng)
-                elif metric == 'psnr':
-                    iqa_gen = psnr(output, inputs_hi, zoom, eng)
-                    iqa_ori = psnr(inputs_lo, inputs_hi, zoom, eng)
-                elif metric == 'brisque':
-                    iqa_gen = brisque(output, zoom, eng)
-                    iqa_ori = brisque(inputs_lo, zoom, eng)
-                    iqa_3 = brisque(inputs_hi, zoom, eng)
-                    iqa_3s += [iqa_3]
-                elif metric == 'niqe':
-                    iqa_gen = niqe(output, zoom, eng)
-                    iqa_ori = niqe(inputs_lo, zoom, eng)
-                    iqa_3 = niqe(inputs_hi, zoom, eng)
-                    iqa_3s += [iqa_3]
-                elif metric == 'piqe':
-                    iqa_gen = piqe(output, zoom, eng)
-                    iqa_ori = piqe(inputs_lo, zoom, eng)
-                    iqa_3 = piqe(inputs_hi, zoom, eng)
-                    iqa_3s += [iqa_3]
-                else:
-                    iqa_gen = None
-                    iqa_ori = None
-                iqa_oris += [iqa_ori]
-                iqa_gens += [iqa_gen]
-
-        print('Average '+metric+':')
-        iqa_oris = np.asarray(iqa_oris)
-        iqa_gens = np.asarray(iqa_gens)
-        if len(iqa_3s) != 0:
-            print('\t1.5 :', np.mean(iqa_oris), np.std(iqa_oris))
-            print('\t1.5+:', np.mean(iqa_gens), np.std(iqa_gens))
-            print('\t3   :', np.mean(iqa_3s), np.std(iqa_3s))
-            print('p_value (1.5 & 1.5+):', p_val(iqa_oris, iqa_gens))
-            print('p_value (1.5 & 3):', p_val(iqa_oris, iqa_3s))
-        else:
-            print('\t1.5 :', np.mean(iqa_oris), np.std(iqa_oris))
-            print('\t1.5+:', np.mean(iqa_gens), np.std(iqa_gens))
-            print('p_value (1.5 & 1.5+):', p_val(iqa_oris, iqa_gens))
-        eng.quit()
-
     def eval_iqa_all(self, zoom=False, metric='brisque'):
         print('Evaluating IQA results on all datasets:')
 
@@ -638,107 +539,43 @@ class GAN:
 
         iqa_func = None
         if metric == 'brisque':
-            iqa_func = brisque
+            iqa_func = brisque_tensor
         elif metric == 'niqe':
-            iqa_func = niqe
+            iqa_func = niqe_tensor
         elif metric == 'piqe':
-            iqa_func = piqe
+            iqa_func = piqe_tensor
 
         data  = []
-        names = ['ADNI', 'NACC', 'FHS ', 'AIBL']
+        names = ['ADNI', 'NACC', 'AIBL']
 
         sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/FHS_NoBack/", "/data/datasets/AIBL_NoBack/"]
         data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
         data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(sources[2], class1='FHS_1.5T_NL', class2='FHS_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(sources[3], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
+        data += [Data(sources[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
         dataloaders = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
 
         data = []
         targets = ["/data/datasets/ADNIP_NoBack/", "/data/datasets/NACCP_NoBack/", "/data/datasets/FHSP_NoBack/", "/data/datasets/AIBLP_NoBack/"]
         data += [Data(targets[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
         data += [Data(targets[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(targets[2], class1='FHS_1.5T_NL', class2='FHS_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(targets[3], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
+        data += [Data(targets[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
         dataloaders_p = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
 
         with torch.no_grad():
             self.netG.train(False)
-
             for i in range(len(names)):
                 name = names[i]
                 dataloader = dataloaders[i]
                 dataloader_p = dataloaders_p[i]
-
                 iqa_oris = []
                 iqa_gens = []
-
                 for i, (input, _) in enumerate(dataloader):
                     input = input.squeeze().numpy()
-                    iqa_ori = iqa_func(input, zoom, eng)
-                    iqa_oris += [iqa_ori]
-
+                    iqa_func(input, zoom, eng, dataloader.Data_list[i])
                 for i, (input_p, _) in enumerate(dataloader_p):
                     input_p = input_p.squeeze().numpy()
-                    iqa_gen = iqa_func(input_p, zoom, eng)
-                    iqa_gens += [iqa_gen]
-
-                print('Average '+metric+' on '+name+' is:')
-                iqa_oris = np.asarray(iqa_oris)
-                iqa_gens = np.asarray(iqa_gens)
-                print('\t1.5 :', np.mean(iqa_oris), np.std(iqa_oris))
-                print('\t1.5+:', np.mean(iqa_gens), np.std(iqa_gens))
-                print('p_value (1.5 & 1.5+):', p_val(iqa_oris, iqa_gens))
+                    iqa_func(input_p, zoom, eng, dataloader.Data_list[i])
         eng.quit()
-
-    def generate(self):
-        # generate & save 1.5T+ images using MRIGAN
-        sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/FHS_NoBack/", "/data/datasets/AIBL_NoBack/"]
-        targets = ["/data/datasets/ADNIP_NoBack/", "/data/datasets/NACCP_NoBack/", "/data/datasets/FHSP_NoBack/", "/data/datasets/AIBLP_NoBack/"]
-
-        #data = Data('AIBL_NoBack', class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all')
-        data = []
-        data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(sources[2], class1='FHS_1.5T_NL', class2='FHS_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(sources[3], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
-        dataloaders = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
-        Data_lists = [d.Data_list for d in data]
-        print('Generating 1.5T+ images for datasets: ADNI, NACC, FHS, AIBL')
-
-        with torch.no_grad():
-            self.netG.train(False)
-            for i in range(len(dataloaders)):
-                dataloader = dataloaders[i]
-                target = targets[i]
-                Data_list = Data_lists[i]
-                for j, (input, label) in enumerate(dataloader):
-                    input = input.cuda()
-                    mask = self.netG(input)
-                    output = input + mask
-                    if not os.path.isdir(target):
-                        os.mkdir(target)
-                    np.save(target+Data_list[j], output.data.cpu().numpy().squeeze())
-
-        print('Generation completed!')
-
-        '''
-        print('testing now!')
-        data = Data(targets[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)
-        data = Data(targets[2], class1='FHS_1.5T_NL', class2='FHS_1.5T_AD', stage='all', shuffle=False)
-        data = Data(targets[3], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)
-        data = DataLoader(data, batch_size=1, shuffle=False)
-
-        with torch.no_grad():
-            self.cnn.model.train(False)
-            for i, (input, label) in enumerate(data):
-                input = input.cuda()
-                pred = self.cnn.model(input)
-                print(pred)
-                break
-            sys.exit()
-        '''
-
 
 
 if __name__ == "__main__":
@@ -746,3 +583,15 @@ if __name__ == "__main__":
     #gan.train()
     gan.optimal_epoch=281
     gan.test()
+
+"""
+train - plot metrics on validation 
+generate_1.5T+ numpy array
+ADNI_test, NACC, AIBL 
+
+
+intermediate:
+
+1.5T+ npy -> niqe npy (3, 10) -> boxplot; table; p-value 
+
+"""
