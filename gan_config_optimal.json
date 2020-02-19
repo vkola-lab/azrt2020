@@ -1,0 +1,13 @@
+{
+    "G_lr": 0.066112,
+    "epochs":108,
+    "Data_dir": "/data/datasets/ADNI_NoBack/",
+    "D_lr": 0.1,
+    "L1_norm_factor": 100,
+    "batch_size": 13,
+    "D_fil_num": 17,
+    "checkpoint_dir": "./model_checkpoint/optimal/",
+    "G_fil_num": 20,
+    "drop_rate": 0.725430,
+    "balanced": 0
+}

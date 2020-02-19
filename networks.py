@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.optim as optim
 import numpy as np
 import matlab.engine
+import shutil
 from torch.utils.data import Dataset, DataLoader
 from dataloader import Data, GAN_Data
 from models import Vanila_CNN, Vanila_CNN_Lite, _netD, _netG
@@ -123,10 +124,10 @@ class GAN:
         self.config = read_json(config)
         self.netG = _netG(self.config["G_fil_num"]).cuda()
         self.netD = _netD(self.config["D_fil_num"]).cuda()
-        self.cnn  = CNN('./cnn_config_1.5T_optimal.json', 0)
-        self.cnn.model.train(False)
-        self.cnn.epoch=146
-        self.cnn.model.load_state_dict(torch.load('{}CNN_{}.pth'.format(self.cnn.checkpoint_dir, self.cnn.epoch)))
+        # self.cnn  = CNN('./cnn_config_1.5T_optimal.json', 0)
+        # self.cnn.model.train(False)
+        # self.cnn.epoch=146
+        # self.cnn.model.load_state_dict(torch.load('{}CNN_{}.pth'.format(self.cnn.checkpoint_dir, self.cnn.epoch)))
 
         self.checkpoint_dir = self.config["checkpoint_dir"] + 'gan/'
         if not os.path.exists(self.checkpoint_dir):
@@ -139,6 +140,10 @@ class GAN:
                                            batch_size=1, shuffle=True)
 
     def train(self):
+        try:
+            os.remove('log.txt')
+        except:
+            pass
         self.G_lr, self.D_lr = self.config["G_lr"], self.config["D_lr"]
         self.optimizer_G = optim.SGD([ {'params': self.netG.conv1.parameters()},
                           {'params': self.netG.conv2.parameters()},
@@ -152,10 +157,80 @@ class GAN:
         for self.epoch in range(self.config['epochs']):
             self.train_model_epoch()
             valid_metric = self.valid_model_epoch()
-            print('This epoch validation metric (SSIM):', valid_metric)
+            print('epoch', self.epoch, 'values:')
+            print('\tTraining set\'s SSIM:', valid_metric)
             self.save_checkpoint(valid_metric)
-        print('(GAN) Best validation metric at the {}th epoch:'.format(self.optimal_epoch), self.valid_optimal_metric)
+            if self.epoch % 20 == 0:
+                self.validate()
+
+        # print('(GAN) Best validation metric at the {}th epoch:'.format(self.optimal_epoch), self.valid_optimal_metric)
         return self.valid_optimal_metric
+
+    def validate(self, plot=True, zoom=False):
+        eng = matlab.engine.start_matlab()
+        print('#########Preparing validation results...#########')
+        with torch.no_grad():
+            self.netG.train(False)
+            # do some plots and post analysis
+            iqa_oris = []
+            iqa_gens = []
+            iqa_3s = []
+            for idx, (inputs_lo, inputs_hi, label) in enumerate(self.valid_dataloader):
+                if label[0] == 2:
+                    continue
+                inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
+                Mask = self.netG(inputs_lo)
+                output = inputs_lo + Mask
+
+                out_dir = './outputs/'+str(self.epoch)+'/'
+                if os.path.isdir(out_dir):
+                    shutil.rmtree(out_dir)
+                os.mkdir(out_dir)
+
+                inputs_lo = inputs_lo.cpu().squeeze().numpy()
+                output = output.cpu().squeeze().numpy()
+                inputs_hi = inputs_hi.cpu().squeeze().numpy()
+
+                iqa_funcs = {'ssim':SSIM, 'immse':immse, 'psnr':psnr, 'brisque':brisque, 'niqe':niqe, 'piqe':piqe}
+                out_string = ''
+                for metric in iqa_funcs:
+                    if metric == 'ssim':
+                        iqa_gen = iqa_funcs[metric](output, inputs_hi, zoom)
+                        iqa_ori = iqa_funcs[metric](inputs_lo, inputs_hi, zoom)
+                    elif metric == 'immse' or metric == 'psnr':
+                        iqa_gen = iqa_funcs[metric](output, inputs_hi, zoom, eng)
+                        iqa_ori = iqa_funcs[metric](inputs_lo, inputs_hi, zoom, eng)
+                    elif metric == 'brisque' or metric == 'niqe' or metric == 'piqe':
+                        iqa_gen = iqa_funcs[metric](output, zoom, eng)
+                        iqa_ori = iqa_funcs[metric](inputs_lo, zoom, eng)
+                        iqa_3 = iqa_funcs[metric](inputs_hi, zoom, eng)
+                        iqa_3s += [iqa_3]
+                    else:
+                        iqa_gen = None
+                        iqa_ori = None
+                    iqa_oris += [iqa_ori]
+                    iqa_gens += [iqa_gen]
+                    out_string += '_'+metric+'-'+str(iqa_gen)
+                if plot:
+                    GAN_test_plot(out_dir, idx, inputs_lo, output, inputs_hi, out_string)
+
+            # print('1.5+ accu:', accuracy_score(labels, pred_gens))
+            # print('1.5  accu:', accuracy_score(labels, pred_oris))
+            # print('3.0  accu:', accuracy_score(labels, pred_tars))
+            # print(len(labels))
+            # print(np.asarray(preds))
+        print('Done. Results saved in', out_dir)
+        '''
+        print('Average '+metric+':')
+        if len(iqa_3s) != 0:
+            print('\t1.5 :', mean(iqa_oris))
+            print('\t1.5+:', mean(iqa_gens))
+            print('\t3   :', mean(iqa_3s))
+        else:
+            print('\t1.5  & 3:', mean(iqa_oris))
+            print('\t1.5+ & 3:', mean(iqa_gens))
+        '''
+        eng.quit()
 
 # numpy_label = label.numpy()
 # index = torch.LongTensor(np.argwhere(numpy_label!=2).squeeze())
@@ -193,7 +268,6 @@ class GAN:
             #             inputs_hi_d.append(inputs_lo[i])
             #             labels_d.append(labels[i])
 
-
             inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
             # get gradient for D network with fake data
             self.netD.zero_grad()
@@ -223,12 +297,18 @@ class GAN:
             loss_G.backward(retain_graph=True)
             self.optimizer_G.step()
 
-            if idx % 5 == 0:
-                print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
-                      % (self.epoch, self.config['epochs'], idx, len(self.train_dataloader), Routput.data.cpu().mean(),
-                         Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), 1000*loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item()))
+            if self.epoch % 5 == 0:
+                with open('log.txt', 'a') as f:
+                    out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
+                          % (self.epoch, self.config['epochs'], idx, len(self.train_dataloader), Routput.data.cpu().mean(),
+                             Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), 1000*loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item()))+'\n'
+                    f.write(out)
+                # print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
+                #       % (self.epoch, self.config['epochs'], idx, len(self.train_dataloader), Routput.data.cpu().mean(),
+                #          Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), 1000*loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item()))
 
     def valid_model_epoch(self):
+        # calculate ssim, brisque, niqe
         with torch.no_grad():
             self.netG.train(False)
             valid_metric = []
@@ -236,12 +316,9 @@ class GAN:
                 inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi
                 Mask = self.netG(inputs_lo)
                 output = inputs_lo + Mask
-                ssim1 = SSIM(inputs_hi.squeeze().numpy(), output.squeeze().cpu().numpy())
-                ssim2 = SSIM(output.squeeze().cpu().numpy(), inputs_hi.squeeze().numpy())
-                if ssim1 != ssim2:
-                    print(ssim1, ssim2)
-                    sys.exit()
-                valid_metric.append(ssim2)
+                ssim = SSIM(output.squeeze().cpu().numpy(), inputs_hi.squeeze().numpy())
+                valid_metric.append(ssim)
+
         return sum(valid_metric) / len(valid_metric)
 
     # def valid_model_epoch(self):
@@ -265,18 +342,19 @@ class GAN:
         return self.checkpoint_dir
 
     def save_checkpoint(self, valid_metric):
-        if valid_metric >= self.valid_optimal_metric:
+        if valid_metric >= self.valid_optimal_metric or True:
             self.optimal_epoch = self.epoch
             self.valid_optimal_metric = valid_metric
             for root, Dir, Files in os.walk(self.checkpoint_dir):
                 for File in Files:
                     if File.endswith('.pth'):
                         try:
-                            os.remove(self.checkpoint_dir + File)
+                            # os.remove(self.checkpoint_dir + File)
+                            pass
                         except:
                             pass
             torch.save(self.netG.state_dict(), '{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
-
+            print('model saved in', self.checkpoint_dir)
 
 # a = a[:,:,105]
 #
@@ -516,6 +594,8 @@ class GAN:
                     input = input.cuda()
                     mask = self.netG(input)
                     output = input + mask
+                    if not os.path.isdir(target):
+                        os.mkdir(target)
                     np.save(target+Data_list[j], output.data.cpu().numpy().squeeze())
 
         print('Generation completed!')

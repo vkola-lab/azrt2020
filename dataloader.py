@@ -25,8 +25,8 @@ class Data(Dataset):
     def __init__(self, Data_dir, class1, class2, stage, ratio=(0.6, 0.2, 0.2), seed=1000, shuffle=True):
         random.seed(seed)
         self.Data_dir = Data_dir
-        Data_list0 = read_txt('../lookuptxt/', class1 + '.txt')
-        Data_list1 = read_txt('../lookuptxt/', class2 + '.txt')
+        Data_list0 = read_txt('./lookuptxt/', class1 + '.txt')
+        Data_list1 = read_txt('./lookuptxt/', class2 + '.txt')
         self.Data_list = Data_list0 + Data_list1
         self.Label_list = [0]*len(Data_list0) + [1]*len(Data_list1)
         self.stage = stage
@@ -106,12 +106,12 @@ class GAN_Data:
     def __init__(self, Data_dir, stage, ratio=(0.6, 0.2, 0.2), seed=1000):
         random.seed(seed)
         self.Data_dir = Data_dir
-        Data_list0 = read_txt('../lookuptxt/', 'ADNI_1.5T_GAN_NL.txt')
-        Data_list1 = read_txt('../lookuptxt/', 'ADNI_1.5T_GAN_MCI.txt')
-        Data_list2 = read_txt('../lookuptxt/', 'ADNI_1.5T_GAN_AD.txt')
-        Data_list3 = read_txt('../lookuptxt/', 'ADNI_3T_NL.txt')
-        Data_list4 = read_txt('../lookuptxt/', 'ADNI_3T_MCI.txt')
-        Data_list5 = read_txt('../lookuptxt/', 'ADNI_3T_AD.txt')
+        Data_list0 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_NL.txt')
+        Data_list1 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_MCI.txt')
+        Data_list2 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_AD.txt')
+        Data_list3 = read_txt('./lookuptxt/', 'ADNI_3T_NL.txt')
+        Data_list4 = read_txt('./lookuptxt/', 'ADNI_3T_MCI.txt')
+        Data_list5 = read_txt('./lookuptxt/', 'ADNI_3T_AD.txt')
         self.Data_list_lo = Data_list0 + Data_list1 + Data_list2
         self.Data_list_hi = Data_list3 + Data_list4 + Data_list5
         self.Label_list = [0]*len(Data_list0) + [2]*len(Data_list1) + [1]*len(Data_list2)

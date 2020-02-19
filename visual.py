@@ -83,7 +83,7 @@ def bold_axs_stick(axs, fontsize):
         tick.label1.set_fontsize(fontsize)
         tick.label1.set_fontweight('bold')
 
-def GAN_test_plot(out_dir, id, img1, output, img3):
+def GAN_test_plot(out_dir, id, img1, output, img3, info):
     img15 = img1
     imgp = output
     img3 = img3
@@ -127,7 +127,7 @@ def GAN_test_plot(out_dir, id, img1, output, img3):
     axs[2, 2].set_xticks([0, 0.5, 1, 1.5])
     axs[2, 2].set_yticks([0, 100, 200, 300])
     axs[2, 2].set_title('1.5T+ voxel histogram', fontsize=25)
-    plt.savefig(out_dir + '{}.png'.format(id), dpi=150)
+    plt.savefig(out_dir+info + '_{}.png'.format(id), dpi=150)
     plt.close()
 
 def MRI_slice_plot(out_dir, mri_low, mri_high):
