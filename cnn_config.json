@@ -1,0 +1,20 @@
+{
+    "cnn": {
+        "fil_num":              20,
+        "drop_rate":            0.137,
+        "batch_size":           2,
+        "balanced":             0,
+        "Data_dir":             "/data/datasets/ADNI_NoBack/",
+        "learning_rate":        0.0001,
+        "train_epochs":         2
+    },
+    "cnnp": {
+        "fil_num":              20,
+        "drop_rate":            0.492,
+        "batch_size":           2,
+        "balanced":             0,
+        "Data_dir":             "/data/datasets/ADNIPP_NoBack/",
+        "learning_rate":        0.0001,
+        "train_epochs":         2
+    }
+}

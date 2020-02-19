@@ -1,6 +1,7 @@
 import numpy as np
 import torch
 import matlab
+import csv
 import torch.nn as nn
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
@@ -176,6 +177,14 @@ def remove_dup(list1, list2):
             idxs.remove(list1.index(item))
     #print(len(idxs), len(list1))
     return idxs
+
+def read_csv(filename):
+    with open(filename, 'r') as f:
+        reader = csv.reader(f)
+        your_list = list(reader)
+    filenames = [a[0] for a in your_list[1:]]
+    labels = [0 if a[1]=='NL' else 1 for a in your_list[1:]]
+    return filenames, labels
 
 def save_list(txt_dir, txt_name, file):
     with open(txt_dir + txt_name, 'w') as f:

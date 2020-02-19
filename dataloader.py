@@ -5,7 +5,7 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 from torch.autograd import Variable
-from utils import read_txt
+from utils import read_txt, read_csv
 import random
 import copy
 
@@ -16,6 +16,33 @@ to do list:
     3. for those 82 cases, 1.5T has inconsistency between data/datasets/ADNI and /data/MRI_GAN/
     4. in filename.txt maybe put complete path of data, no need to assign data_dir
 """
+
+class CNN_Data(Dataset):
+    """
+    csv files ./lookuptxt/*.csv contains MRI filenames along with demographic and diagnosis information 
+    """
+    def __init__(self, Data_dir, exp_idx, stage, seed=1000):
+        random.seed(seed)
+        self.Data_dir = Data_dir
+        if stage in ['train', 'valid', 'test']:
+            self.Data_list, self.Label_list = read_csv('./lookupcsv/exp{}/{}.csv'.format(exp_idx, stage))
+        elif stage in ['ADNI', 'NACC', 'AIBL']:
+            self.Data_list, self.Label_list = read_csv('./lookupcsv/{}.csv'.format(stage))
+
+    def __len__(self):
+        return len(self.Data_list)
+
+    def __getitem__(self, idx):
+        label = self.Label_list[idx]
+        data = np.load(self.Data_dir + self.Data_list[idx] + '.npy').astype(np.float32)
+        data = np.expand_dims(data, axis=0)
+        return data, label
+
+    def get_sample_weights(self):
+        count, count0, count1 = float(len(self.Label_list)), float(self.Label_list.count(0)), float(self.Label_list.count(1))
+        weights = [count / count0 if i == 0 else count / count1 for i in self.Label_list]
+        return weights, count0 / count1
+
 
 class Data(Dataset):
     """
