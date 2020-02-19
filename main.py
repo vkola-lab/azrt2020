@@ -1,14 +1,38 @@
-
+from networks import CNN_Wrapper
+from utils import read_json
+import sys
+sys.path.insert(1, './plot/')
+from plot import roc_plot_perfrom_table
 
 def gan_main():
     # gan training, record niqe, image, SSIM, brisque, ... over time on validation set
     # after training, generate 1.5T* for CNN /data/datasets/ADNIP_NoBack/
     # ...
+    return
 
 
-def cnn_main():
-    # 5 random splits on 1.5T and 1.5T*
-    # generate SS (ROC) and PR curves
-    # print CNN performance table, accu, sens, spec, f1, ... 
+def cnn_main(repe_time, model_name, cnn_setting):
+    for exp_idx in range(repe_time):
+        cnn = CNN_Wrapper(fil_num        = cnn_setting['fil_num'], 
+                        drop_rate       = cnn_setting['drop_rate'], 
+                        batch_size      = cnn_setting['batch_size'], 
+                        balanced        = cnn_setting['balanced'], 
+                        Data_dir        = cnn_setting['Data_dir'], 
+                        exp_idx         = exp_idx,
+                        seed            = 1000,
+                        model_name      = model_name,
+                        metric          = 'accuracy')
+        cnn.train(lr     = cnn_setting['learning_rate'],
+                  epochs = cnn_setting['train_epochs'])
+        cnn.test()
+    
+
+if __name__ == "__main__":
+    cnn_config = read_json('./cnn_config.json')
+    # cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
+    # cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
+    roc_plot_perfrom_table()
+
+    
 
 

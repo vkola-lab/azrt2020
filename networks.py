@@ -6,7 +6,7 @@ import torch.optim as optim
 import numpy as np
 import matlab.engine
 from torch.utils.data import Dataset, DataLoader
-from dataloader import Data, GAN_Data
+from dataloader import Data, GAN_Data, CNN_Data
 from models import Vanila_CNN, Vanila_CNN_Lite, _netD, _netG
 from utils import *
 from tqdm import tqdm
@@ -20,13 +20,114 @@ from sklearn.metrics import accuracy_score
 3. early stopping or set epoch
 
 """
+class CNN_Wrapper:
+    def __init__(self, fil_num, drop_rate, seed, batch_size, balanced, Data_dir, exp_idx, model_name, metric):
+        self.seed = seed
+        self.exp_idx = exp_idx
+        self.Data_dir = Data_dir
+        self.model_name = model_name
+        self.eval_metric = get_accu if metric == 'accuracy' else get_MCC
+        self.model = Vanila_CNN_Lite(fil_num=fil_num, drop_rate=drop_rate).cuda()
+        self.prepare_dataloader(batch_size, balanced, Data_dir)
+        self.checkpoint_dir = './checkpoint_dir/{}_exp{}/'.format(self.model_name, exp_idx)
+        if not os.path.exists(self.checkpoint_dir):
+            os.mkdir(self.checkpoint_dir)
+
+    def train(self, lr, epochs):
+        self.optimizer = optim.Adam(self.model.parameters(), lr=lr, betas=(0.5, 0.999))
+        self.criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1, self.imbalanced_ratio])).cuda()
+        self.optimal_valid_matrix = [[0, 0], [0, 0]]
+        self.optimal_valid_metric = 0
+        self.optimal_epoch        = -1
+        for self.epoch in range(epochs):
+            self.train_model_epoch()
+            valid_matrix = self.valid_model_epoch()
+            print('{}th epoch validation confusion matrix:'.format(self.epoch), valid_matrix, 'eval_metric:', "%.4f" % self.eval_metric(valid_matrix))
+            self.save_checkpoint(valid_matrix)
+        print('Best model saved at the {}th epoch:'.format(self.optimal_epoch), self.optimal_valid_metric, self.optimal_valid_matrix)
+        return self.optimal_valid_metric
+
+    def test(self):
+        print('testing ... ')
+        self.model.load_state_dict(torch.load('{}{}_{}.pth'.format(self.checkpoint_dir, self.model_name, self.optimal_epoch)))
+        self.model.train(False)
+        with torch.no_grad():
+            for stage in ['train', 'valid', 'test', 'AIBL', 'NACC']:
+                Data_dir = self.Data_dir
+                if stage in ['AIBL', 'NACC']:
+                    Data_dir = Data_dir.replace('ADNI', stage)
+                data = CNN_Data(Data_dir, self.exp_idx, stage=stage, seed=self.seed)
+                dataloader = DataLoader(data, batch_size=10, shuffle=False)
+                f = open(self.checkpoint_dir + 'raw_score_{}.txt'.format(stage), 'w')
+                matrix = [[0, 0], [0, 0]]
+                for idx, (inputs, labels) in enumerate(dataloader):
+                    inputs, labels = inputs.cuda(), labels.cuda()
+                    preds = self.model(inputs)
+                    write_raw_score(f, preds, labels)
+                    matrix = matrix_sum(matrix, get_confusion_matrix(preds, labels))
+                print(stage + ' confusion matrix ', matrix, ' accuracy ', self.eval_metric(matrix))
+                f.close()
+
+    def save_checkpoint(self, valid_matrix):
+        if self.eval_metric(valid_matrix) >= self.optimal_valid_metric:
+            self.optimal_epoch = self.epoch
+            self.optimal_valid_matrix = valid_matrix
+            self.optimal_valid_metric = self.eval_metric(valid_matrix)
+            for root, Dir, Files in os.walk(self.checkpoint_dir):
+                for File in Files:
+                    if File.endswith('.pth'):
+                        try:
+                            os.remove(self.checkpoint_dir + File)
+                        except:
+                            pass
+            torch.save(self.model.state_dict(), '{}{}_{}.pth'.format(self.checkpoint_dir, self.model_name, self.optimal_epoch))
+
+    def train_model_epoch(self):
+        self.model.train(True)
+        for inputs, labels in self.train_dataloader:
+            inputs, labels = inputs.cuda(), labels.cuda()
+            self.model.zero_grad()
+            preds = self.model(inputs)
+            loss = self.criterion(preds, labels)
+            loss.backward()
+            self.optimizer.step()
+
+    def valid_model_epoch(self):
+        with torch.no_grad():
+            self.model.train(False)
+            valid_matrix = [[0, 0], [0, 0]]
+            for inputs, labels in self.valid_dataloader:
+                inputs, labels = inputs.cuda(), labels.cuda()
+                preds = self.model(inputs)
+                valid_matrix = matrix_sum(valid_matrix, get_confusion_matrix(preds, labels))
+        return valid_matrix
+
+    def prepare_dataloader(self, batch_size, balanced, Data_dir):
+        train_data = CNN_Data(Data_dir, self.exp_idx, stage='train', seed=self.seed)
+        valid_data = CNN_Data(Data_dir, self.exp_idx, stage='valid', seed=self.seed)
+        test_data  = CNN_Data(Data_dir, self.exp_idx, stage='test', seed=self.seed)
+        sample_weight, self.imbalanced_ratio = train_data.get_sample_weights()
+        # the following if else blocks represent two ways of handling class imbalance issue
+        if balanced == 1:
+            # use pytorch sampler to sample data with probability according to the count of each class
+            # so that each mini-batch has the same expectation counts of samples from each class
+            sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight, len(sample_weight))
+            self.train_dataloader = DataLoader(train_data, batch_size=batch_size, sampler=sampler)
+            self.imbalanced_ratio = 1
+        elif balanced == 0:
+            # sample data from the same probability, but
+            # self.imbalanced_ratio will be used in the weighted cross entropy loss to handle imbalanced issue
+            self.train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
+        self.valid_dataloader = DataLoader(valid_data, batch_size=batch_size, shuffle=False)
+        self.test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
+
 
 class CNN:
-    def __init__(self, config, seed):
+    def __init__(self, config, exp_idx, seed):
         self.seed = seed
         self.config = read_json(config)
         self.model = Vanila_CNN_Lite(fil_num=self.config['fil_num'], drop_rate=self.config['drop_rate']).cuda()
-        self.checkpoint_dir = self.config["checkpoint_dir"] + self.config['class1'] + '_' + self.config['class2'] + '_balance{}'.format(self.config['balanced']) + '/'
+        self.checkpoint_dir = self.config["checkpoint_dir"] + 'exp{}/'.format(exp_idx)
         if not os.path.exists(self.checkpoint_dir):
             os.mkdir(self.checkpoint_dir)
         train_data = Data(self.config['Data_dir'], self.config['class1'], self.config['class2'], seed=seed, stage='train')
@@ -49,6 +150,27 @@ class CNN:
         self.test_dataloader = DataLoader(Data(self.config['Data_dir'], self.config['class1'], self.config['class2'], seed=seed, stage='test'),
                                            batch_size=self.config['batch_size'], shuffle=True)
 
+   
+    def prepare_dataloader(self, batch_size, balanced, Data_dir):
+        train_data = CNN_Data(Data_dir, self.exp_idx, stage='train', seed=self.seed)
+        valid_data = CNN_Data(Data_dir, self.exp_idx, stage='valid', seed=self.seed)
+        test_data  = CNN_Data(Data_dir, self.exp_idx, stage='test', seed=self.seed)
+        sample_weight, self.imbalanced_ratio = train_data.get_sample_weights()
+        # the following if else blocks represent two ways of handling class imbalance issue
+        if balanced == 1:
+            # use pytorch sampler to sample data with probability according to the count of each class
+            # so that each mini-batch has the same expectation counts of samples from each class
+            sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight, len(sample_weight))
+            self.train_dataloader = DataLoader(train_data, batch_size=batch_size, sampler=sampler)
+            self.imbalanced_ratio = 1
+        elif balanced == 0:
+            # sample data from the same probability, but
+            # self.imbalanced_ratio will be used in the weighted cross entropy loss to handle imbalanced issue
+            self.train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
+        self.valid_dataloader = DataLoader(valid_data, batch_size=batch_size, shuffle=False)
+        self.test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
+
+   
     def train(self, verbose=2):
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config['lr'], betas=(0.5, 0.999))
         self.criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1, self.imbalanced_ratio])).cuda()
