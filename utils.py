@@ -2,6 +2,7 @@ import numpy as np
 import torch
 import matlab
 import csv
+import os
 import torch.nn as nn
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
@@ -41,37 +42,46 @@ for i in range(4):
     print('p_value:', p)
 #'''
 
-def brisque_tensor(tensor, zoom, eng, data_list):
-    vals = []
-    start = 30
-    end = len()-30
-    for slice_idx in range(start, end, (start-end)//10):
-        if zoom:
-            side_a = slice_idx-30
-            side_b = slice_idx+30
-            img = tensor[side_a:side_b, side_a:side_b, 105]
+def timeit(method):
+    def timed(*args, **kw):
+        ts = time.time()
+        result = method(*args, **kw)
+        te = time.time()
+        if 'log_time' in kw:
+            name = kw.get('log_name', method.__name__.upper())
+            kw['log_time'][name] = int((te - ts) * 1000)
         else:
-            img = tensor[slice_idx, :, :]
-        img = matlab.double(img.tolist())
-        val = eng.brisque(img)
-        vals.append(val)
-    val_avg = sum(vals) / len(vals)
-    return val_avg
+            print('%r  %2.2f ms' % (method.__name__, (te - ts) * 1000))
+        return result
+    return timed
 
-def niqe_tensor(tensor, zoom, eng, data_list):
-    vals = []
-    for slice_idx in [50, 80, 110]:
-        if zoom:
-            side_a = slice_idx
-            side_b = slice_idx+60
-            img = tensor[side_a:side_b, side_a:side_b, 105]
-        else:
-            img = tensor[slice_idx, :, :]
-        img = matlab.double(img.tolist())
-        val = eng.niqe(img)
-        vals.append(val)
-    val_avg = sum(vals) / len(vals)
-    return val_avg
+def iqa_tensor(tensor, eng, filename, metric, target):
+    if not os.path.isdir(target):
+        os.mkdir(target)
+    out = []
+    if metric == 'brisque':
+        func = eng.brisque
+    elif metric == 'niqe':
+        func = eng.niqe
+
+    for side in range(len(tensor.shape)):
+        start = 30
+        end = tensor.shape[side]-30
+        step = (end-start)//10
+        vals = []
+        for slice_idx in range(start, end, step):
+            if side == 0:
+                img = tensor[slice_idx, :, :]
+            elif side == 1:
+                img = tensor[:, slice_idx, :]
+            else:
+                img = tensor[:, :, slice_idx]
+            img = matlab.double(img.tolist())
+
+            vals += [func(img)]
+        out += [vals]
+    np.save(target+filename+'$'+metric, out)
+    return np.asarray(out)
 
 
 def immse(tensor1, tensor2, zoom, eng):
@@ -358,5 +368,5 @@ def test(**super_kwargs):
 def test_2(item, ittt, df=1):
     print(item, ittt, df)
 
-if __name__ == "__main__":
-    test(item=3, ittt='a', whole=3)
+# if __name__ == "__main__":
+#     test(item=3, ittt='a', whole=3)

@@ -151,7 +151,7 @@ class CNN:
         self.test_dataloader = DataLoader(Data(self.config['Data_dir'], self.config['class1'], self.config['class2'], seed=seed, stage='test'),
                                            batch_size=self.config['batch_size'], shuffle=True)
 
-   
+
     def prepare_dataloader(self, batch_size, balanced, Data_dir):
         train_data = CNN_Data(Data_dir, self.exp_idx, stage='train', seed=self.seed)
         valid_data = CNN_Data(Data_dir, self.exp_idx, stage='valid', seed=self.seed)
@@ -171,7 +171,7 @@ class CNN:
         self.valid_dataloader = DataLoader(valid_data, batch_size=batch_size, shuffle=False)
         self.test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
 
-   
+
     def train(self, verbose=2):
         self.optimizer = optim.Adam(self.model.parameters(), lr=self.config['lr'], betas=(0.5, 0.999))
         self.criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1, self.imbalanced_ratio])).cuda()
@@ -292,6 +292,7 @@ class GAN:
         # generate & save 1.5T+ images using MRIGAN
         sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/AIBL_NoBack/"]
         targets = ["/data/datasets/ADNIP_NoBack/", "/data/datasets/NACCP_NoBack/", "/data/datasets/AIBLP_NoBack/"]
+        targets = ["./ADNIP_NoBack/", "./NACCP_NoBack/", "./AIBLP_NoBack/"]
 
         data = []
         data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
@@ -326,15 +327,14 @@ class GAN:
             iqa_oris = []
             iqa_gens = []
             iqa_3s = []
+            out_dir = './outputs/'+str(self.epoch)+'/'
+            if os.path.isdir(out_dir):
+                shutil.rmtree(out_dir)
+            os.mkdir(out_dir)
             for idx, (inputs_lo, inputs_hi, label) in enumerate(self.valid_dataloader):
                 inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
                 Mask = self.netG(inputs_lo)
                 output = inputs_lo + Mask
-
-                out_dir = './outputs/'+str(self.epoch)+'/'
-                if os.path.isdir(out_dir):
-                    shutil.rmtree(out_dir)
-                os.mkdir(out_dir)
 
                 inputs_lo = inputs_lo.cpu().squeeze().numpy()
                 output = output.cpu().squeeze().numpy()
@@ -531,67 +531,67 @@ class GAN:
             print('\t1.5+ & 3:', mean(iqa_gens))
         eng.quit()
 
-    def eval_iqa_all(self, zoom=False, metric='brisque'):
-        print('Evaluating IQA results on all datasets:')
-
+    def eval_iqa_all(self, metrics=['brisque']):
+        # print('Evaluating IQA results on all datasets:')
         eng = matlab.engine.start_matlab()
-        self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))) #use optimal_epoch instead of epoch
-
-        iqa_func = None
-        if metric == 'brisque':
-            iqa_func = brisque_tensor
-        elif metric == 'niqe':
-            iqa_func = niqe_tensor
-        elif metric == 'piqe':
-            iqa_func = piqe_tensor
 
         data  = []
         names = ['ADNI', 'NACC', 'AIBL']
 
-        sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/FHS_NoBack/", "/data/datasets/AIBL_NoBack/"]
+        sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/AIBL_NoBack/"]
         data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
         data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
         data += [Data(sources[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
         dataloaders = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
 
         data = []
-        targets = ["/data/datasets/ADNIP_NoBack/", "/data/datasets/NACCP_NoBack/", "/data/datasets/FHSP_NoBack/", "/data/datasets/AIBLP_NoBack/"]
+        targets = ["/data/datasets/ADNIP_NoBack/", "/data/datasets/NACCP_NoBack/", "/data/datasets/AIBLP_NoBack/"]
+        targets = ["./ADNIP_NoBack/", "./NACCP_NoBack/", "./AIBLP_NoBack/"]
         data += [Data(targets[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
         data += [Data(targets[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
         data += [Data(targets[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
         dataloaders_p = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
 
-        with torch.no_grad():
-            self.netG.train(False)
-            for i in range(len(names)):
-                name = names[i]
-                dataloader = dataloaders[i]
-                dataloader_p = dataloaders_p[i]
+        Data_lists = [d.Data_list for d in data]
+
+        out_dir = './iqa/'
+        if os.path.isdir(out_dir):
+            shutil.rmtree(out_dir)
+        os.mkdir(out_dir)
+
+        for m in metrics:
+            for id in range(len(names)):
+                name = names[id]
+                Data_list = Data_lists[id]
+                dataloader = dataloaders[id]
+                dataloader_p = dataloaders_p[id]
                 iqa_oris = []
                 iqa_gens = []
                 for i, (input, _) in enumerate(dataloader):
                     input = input.squeeze().numpy()
-                    iqa_func(input, zoom, eng, dataloader.Data_list[i])
-                for i, (input_p, _) in enumerate(dataloader_p):
+                    iqa_tensor(input, eng, Data_list[i], m, out_dir)
+                    break
+                for j, (input_p, _) in enumerate(dataloader_p):
                     input_p = input_p.squeeze().numpy()
-                    iqa_func(input_p, zoom, eng, dataloader.Data_list[i])
+                    iqa_tensor(input_p, eng, Data_list[j], m, out_dir)
+                    break
         eng.quit()
 
 
-if __name__ == "__main__":
-    gan = GAN('./gan_config_optimal.json', 0)
-    #gan.train()
-    gan.optimal_epoch=281
-    gan.test()
+# if __name__ == "__main__":
+#     gan = GAN('./gan_config_optimal.json', 0)
+#     #gan.train()
+#     gan.optimal_epoch=281
+#     gan.test()
 
 """
-train - plot metrics on validation 
+train - plot metrics on validation
 generate_1.5T+ numpy array
-ADNI_test, NACC, AIBL 
+ADNI_test, NACC, AIBL
 
 
 intermediate:
 
-1.5T+ npy -> niqe npy (3, 10) -> boxplot; table; p-value 
+1.5T+ npy -> niqe npy (3, 10) -> boxplot; table; p-value
 
 """

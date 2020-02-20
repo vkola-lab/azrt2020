@@ -1,6 +1,7 @@
 from dataloader import Data
 from networks import CNN_Wrapper, CNN, GAN
 from utils import read_json
+import torch
 import sys
 sys.path.insert(1, './plot/')
 from plot import roc_plot_perfrom_table
@@ -12,7 +13,7 @@ def gan_main():
     gan = GAN('./gan_config_optimal.json', 0)
     gan.train()
     #''' (108)
-    # gan.optimal_epoch=105
+    # gan.optimal_epoch=0
     # gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, gan.optimal_epoch)))
     # print(gan.valid_model_epoch())
     #gan.test(False)
@@ -23,12 +24,11 @@ def gan_main():
     #     gan.eval_iqa_all(zoom=False, metric=m)
     #     gan.eval_iqa_all(zoom=True, metric=m)
     # gan.test(zoom=True, metric='piqe')
-    gan.generate() # create 1.5T+ numpy array
-    gan.eval_iqa_all(metric='brisque') # create brisque (3, 10) tensor
-    gan.eval_iqa_all(metric='niqe')
-    gan.table()
-    gan_boxplot()
-    
+    # gan.generate() # create 1.5T+ numpy array
+    # gan.table()
+    # gan_boxplot()
+    return gan
+
 
 def cnn_main(repe_time, model_name, cnn_setting):
     for exp_idx in range(repe_time):
@@ -46,8 +46,9 @@ def cnn_main(repe_time, model_name, cnn_setting):
         cnn.test()
 
 if __name__ == "__main__":
-    gan_main()
+    gan = gan_main()
     cnn_config = read_json('./cnn_config.json')
-    # cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
-    # cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
+    gan.eval_iqa_all(['brisque', 'niqe'])
+    cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
+    cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
     roc_plot_perfrom_table()
