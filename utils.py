@@ -15,16 +15,6 @@ from sklearn.metrics import precision_recall_fscore_support
 
 
 '''
-ori = [[0.95343137, 0.83752094, 0.84259259, 0.87958115],
-       [0.94852941, 0.86934673, 0.86111111, 0.86910995],
-       [0.94362745, 0.85092127, 0.77777778, 0.85078534],
-       [0.94362745, 0.84254606, 0.87037037, 0.84554974],
-       [0.94852941, 0.7319933,  0.75,       0.87958115]]
-gen = [0.94362745, 0.86599665, 0.84259259, 0.89790576],
-       [0.93137255, 0.84087102, 0.78703704, 0.86649215],
-       [0.93382353, 0.82579564, 0.75,       0.87434555],
-       [0.95833333, 0.85092127, 0.80555556, 0.89005236],
-       [0.94852941, 0.86097152, 0.7962963,  0.89005236]]
 ori = [[0.93382353, 0.81742044, 0.80555556, 0.88481675,],
        [0.94607843, 0.82077052, 0.76851852, 0.88219895,],
        [0.94117647, 0.84589615, 0.85185185, 0.81413613,],
@@ -40,7 +30,6 @@ gen = [[0.95588235, 0.86097152, 0.73148148, 0.87958115,],
 ori = np.asarray(ori)
 gen = np.asarray(gen)
 
-
 for i in range(4):
     o = ori[:, i]
     g = gen[:, i]
@@ -51,6 +40,39 @@ for i in range(4):
     t, p = stats.ttest_ind(o, g, equal_var = False)
     print('p_value:', p)
 #'''
+
+def brisque_tensor(tensor, zoom, eng, data_list):
+    vals = []
+    start = 30
+    end = len()-30
+    for slice_idx in range(start, end, (start-end)//10):
+        if zoom:
+            side_a = slice_idx-30
+            side_b = slice_idx+30
+            img = tensor[side_a:side_b, side_a:side_b, 105]
+        else:
+            img = tensor[slice_idx, :, :]
+        img = matlab.double(img.tolist())
+        val = eng.brisque(img)
+        vals.append(val)
+    val_avg = sum(vals) / len(vals)
+    return val_avg
+
+def niqe_tensor(tensor, zoom, eng, data_list):
+    vals = []
+    for slice_idx in [50, 80, 110]:
+        if zoom:
+            side_a = slice_idx
+            side_b = slice_idx+60
+            img = tensor[side_a:side_b, side_a:side_b, 105]
+        else:
+            img = tensor[slice_idx, :, :]
+        img = matlab.double(img.tolist())
+        val = eng.niqe(img)
+        vals.append(val)
+    val_avg = sum(vals) / len(vals)
+    return val_avg
+
 
 def immse(tensor1, tensor2, zoom, eng):
     vals = []
