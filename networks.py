@@ -43,7 +43,7 @@ class CNN_Wrapper:
         for self.epoch in range(epochs):
             self.train_model_epoch()
             valid_matrix = self.valid_model_epoch()
-            print('{}th epoch validation confusion matrix:'.format(self.epoch), valid_matrix, 'eval_metric:', "%.4f" % self.eval_metric(valid_matrix))
+            #print('{}th epoch validation confusion matrix:'.format(self.epoch), valid_matrix, 'eval_metric:', "%.4f" % self.eval_metric(valid_matrix))
             self.save_checkpoint(valid_matrix)
         print('Best model saved at the {}th epoch:'.format(self.optimal_epoch), self.optimal_valid_metric, self.optimal_valid_matrix)
         return self.optimal_valid_metric
@@ -278,10 +278,10 @@ class GAN:
         self.valid_optimal_metric, self.optimal_epoch = 0, -1
         for self.epoch in range(self.config['epochs']):
             self.train_model_epoch()
-            valid_metric = self.valid_model_epoch()
             # print('epoch', self.epoch, 'values:')
             # print('\tTraining set\'s SSIM:', valid_metric)
-            if self.epoch % 20 == 0:
+            if self.epoch % 5 == 0:
+                valid_metric = self.valid_model_epoch()
                 self.validate()
                 self.save_checkpoint(valid_metric)
 
@@ -359,7 +359,7 @@ class GAN:
                         iqa_ori = None
                     iqa_oris += [iqa_ori]
                     iqa_gens += [iqa_gen]
-                    out_string += '_'+metric+'-'+str(iqa_gen)
+                    out_string += '#'+metric+'#'+str(iqa_gen)
                 if plot:
                     GAN_test_plot(out_dir, idx, inputs_lo, output, inputs_hi, out_string)
 
@@ -570,11 +570,9 @@ class GAN:
                 for i, (input, _) in enumerate(dataloader):
                     input = input.squeeze().numpy()
                     iqa_tensor(input, eng, Data_list[i], m, out_dir)
-                    break
                 for j, (input_p, _) in enumerate(dataloader_p):
                     input_p = input_p.squeeze().numpy()
                     iqa_tensor(input_p, eng, Data_list[j], m, out_dir)
-                    break
         eng.quit()
 
 
