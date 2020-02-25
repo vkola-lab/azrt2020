@@ -1,13 +1,15 @@
 {
-    "G_lr": 0.066112,
-    "epochs":108,
+    "G_lr": 0.0066112,
+    "epochs":11000,
     "Data_dir": "/data/datasets/ADNI_NoBack/",
-    "D_lr": 0.1,
+    "D_lr": 0.01,
     "L1_norm_factor": 100,
     "batch_size": 13,
     "D_fil_num": 17,
     "checkpoint_dir": "./checkpoint_dir/",
     "G_fil_num": 20,
     "drop_rate": 0.725430,
-    "balanced": 0
+    "balanced": 0,
+    "warm_G_epoch":10,
+    "warm_D_epoch":10000
 }

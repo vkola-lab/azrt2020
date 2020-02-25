@@ -6,15 +6,15 @@
         "balanced":             0,
         "Data_dir":             "/data/datasets/ADNI_NoBack/",
         "learning_rate":        0.0001,
-        "train_epochs":         2
+        "train_epochs":         200
     },
     "cnnp": {
         "fil_num":              20,
         "drop_rate":            0.492,
         "batch_size":           2,
         "balanced":             0,
-        "Data_dir":             "/data/datasets/ADNIPP_NoBack/",
+        "Data_dir":             "./ADNIP_NoBack/",
         "learning_rate":        0.0001,
-        "train_epochs":         2
+        "train_epochs":         200
     }
 }
