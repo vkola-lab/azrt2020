@@ -257,9 +257,9 @@ class GAN:
         self.train_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='train'),
                                            batch_size=self.config['batch_size'], shuffle=True)
         self.valid_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='valid'),
-                                           batch_size=1, shuffle=True)
+                                           batch_size=1, shuffle=False)
         self.test_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='test'),
-                                           batch_size=1, shuffle=True)
+                                           batch_size=1, shuffle=False)
 
     def train(self):
         try:
@@ -277,12 +277,18 @@ class GAN:
         self.criterion = nn.BCELoss().cuda()
         self.valid_optimal_metric, self.optimal_epoch = 0, -1
         for self.epoch in range(self.config['epochs']):
-            self.train_model_epoch()
+            cond1 = self.epoch < self.config["warm_G_epoch"]
+            cond2 = self.config["warm_G_epoch"]<=self.epoch<=self.config["warm_D_epoch"]
+            # print(self.epoch, self.config["warm_G_epoch"], self.config["warm_D_epoch"])
+            # print(cond1, cond2)
+            self.train_model_epoch(warmup_G=cond1, warmup_D=cond2)
             # print('epoch', self.epoch, 'values:')
             # print('\tTraining set\'s SSIM:', valid_metric)
-            if self.epoch % 5 == 0:
+            if self.epoch % 200 == 0:
                 valid_metric = self.valid_model_epoch()
-                self.validate()
+                if self.epoch == self.config["warm_G_epoch"]:
+                    print('saving image after warmup G')
+                    self.validate()
                 self.save_checkpoint(valid_metric)
 
         # print('(GAN) Best validation metric at the {}th epoch:'.format(self.optimal_epoch), self.valid_optimal_metric)
@@ -318,6 +324,7 @@ class GAN:
 
         # print('Generation completed!')
 
+    @timeit
     def validate(self, plot=True, zoom=False):
         eng = matlab.engine.start_matlab()
         # print('#########Preparing validation results...#########')
@@ -366,7 +373,8 @@ class GAN:
         # print('Done. Results saved in', out_dir)
         eng.quit()
 
-    def train_model_epoch(self):
+    def train_model_epoch(self, warmup_G=False, warmup_D=False):
+        # print("warmup_G", warmup_G, "warmup_D", warmup_D)
         self.netG.train(True)
         self.netD.train(True)
         #Error may raise when input is actually smaller than batch size
@@ -388,7 +396,8 @@ class GAN:
             Rlabel = label.fill_(1).cuda()
             loss_D_R = self.criterion(Routput, Rlabel)
             loss_D_R.backward()
-            self.optimizer_D.step()
+            if not warmup_G:
+                self.optimizer_D.step()
             # get gradient for G network
             self.netG.zero_grad()
             Goutput = self.netD(Output)
@@ -397,20 +406,24 @@ class GAN:
             loss_G_GAN = self.criterion(Goutput, Glabel)
             # get gradient for G network with L2 norm between real and fake
             loss_G_dif = torch.mean(torch.abs(Mask))
-            loss_G = loss_G_GAN + self.config["L1_norm_factor"] * loss_G_dif
+            if warmup_G:
+                loss_G = self.config["L1_norm_factor"] * loss_G_dif
+            else:
+                loss_G = loss_G_GAN + self.config["L1_norm_factor"] * loss_G_dif
             # loss_G.backward(retain_graph=True)
             loss_G.backward(retain_graph=True)
-            self.optimizer_G.step()
+            if not warmup_D:
+                self.optimizer_G.step()
 
-            if self.epoch % 5 == 0:
+            if self.epoch % 100 == 0:
                 with open('log.txt', 'a') as f:
                     out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
                           % (self.epoch, self.config['epochs'], idx, len(self.train_dataloader), Routput.data.cpu().mean(),
                              Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), 1000*loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item()))+'\n'
                     f.write(out)
-                # print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
-                #       % (self.epoch, self.config['epochs'], idx, len(self.train_dataloader), Routput.data.cpu().mean(),
-                #          Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), 1000*loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item()))
+                print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
+                      % (self.epoch, self.config['epochs'], idx, len(self.train_dataloader), Routput.data.cpu().mean(),
+                         Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), 1000*loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item()))
 
     def valid_model_epoch(self):
         # calculate ssim, brisque, niqe
@@ -440,7 +453,8 @@ class GAN:
                             pass
                         except:
                             pass
-            torch.save(self.netG.state_dict(), '{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
+            # torch.save(self.netG.state_dict(), '{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
+            torch.save(self.netD.state_dict(), '{}D_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
             # print('model saved in', self.checkpoint_dir)
 
 # a = a[:,:,105]

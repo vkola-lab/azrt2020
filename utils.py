@@ -11,6 +11,7 @@ import json
 from skimage import img_as_float
 from skimage.metrics import structural_similarity as ssim
 import sys
+import time
 from scipy import stats
 from sklearn.metrics import precision_recall_fscore_support
 
