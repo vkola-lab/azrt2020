@@ -11,5 +11,5 @@
     "drop_rate": 0.725430,
     "balanced": 0,
     "warm_G_epoch":10,
-    "warm_D_epoch":10000
+    "warm_D_epoch":200
 }

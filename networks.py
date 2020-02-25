@@ -284,9 +284,9 @@ class GAN:
             self.train_model_epoch(warmup_G=cond1, warmup_D=cond2)
             # print('epoch', self.epoch, 'values:')
             # print('\tTraining set\'s SSIM:', valid_metric)
-            if self.epoch % 200 == 0:
+            if self.epoch % 10 == 0:
                 valid_metric = self.valid_model_epoch()
-                if self.epoch == self.config["warm_G_epoch"]:
+                if self.epoch == self.config["warm_G_epoch"] or self.epoch > self.config["warm_D_epoch"]:
                     print('saving image after warmup G')
                     self.validate()
                 self.save_checkpoint(valid_metric)
@@ -453,7 +453,7 @@ class GAN:
                             pass
                         except:
                             pass
-            # torch.save(self.netG.state_dict(), '{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
+            torch.save(self.netG.state_dict(), '{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
             torch.save(self.netD.state_dict(), '{}D_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
             # print('model saved in', self.checkpoint_dir)
 
