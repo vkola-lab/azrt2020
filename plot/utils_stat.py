@@ -74,10 +74,10 @@ def calc_performance_statistics(all_scores, y):
     return statistics
 
 
-def get_roc_info(y, y_score_list):
+def get_roc_info(y_list, y_score_list):
     fpr_pt = np.linspace(0, 1, 1001)
     tprs, aucs = [], []
-    for y_score in y_score_list:
+    for y, y_score in zip(y_list, y_score_list):
         fpr, tpr, _ = roc_curve(y_true=y, y_score=y_score, drop_intermediate=True)
         tprs.append(interp(fpr_pt, fpr, tpr))
         tprs[-1][0] = 0.0
@@ -100,12 +100,12 @@ def get_roc_info(y, y_score_list):
     return rslt
 
 
-def get_pr_info(y, y_score_list):
+def get_pr_info(y_list, y_score_list):
     rc_pt = np.linspace(0, 1, 1001)
     rc_pt[0] = 1e-16
     prs = []
     aps = []
-    for y_score in y_score_list:
+    for y, y_score in zip(y_list, y_score_list):
         pr, rc, _ = precision_recall_curve(y_true=y, probas_pred=y_score)
         aps.append(average_precision_score(y_true=y, y_score=y_score))
         pr, rc = pr[::-1], rc[::-1]

@@ -37,12 +37,13 @@ def roc_plot_perfrom_table():
     for m in ['cnn', 'cnnp']:
         roc_info[m], pr_info[m] = {}, {}
         for ds in ['test', 'AIBL', 'NACC']:
-            Scores = []
+            Scores, Labels = [], []
             for exp_idx in range(5):
                 labels, scores = read_raw_score('checkpoint_dir/{}_exp{}/raw_score_{}.txt'.format(m, exp_idx, ds))
                 Scores.append(scores)
-            roc_info[m][ds] = get_roc_info(labels, Scores)
-            pr_info[m][ds] = get_pr_info(labels, Scores)
+                Labels.append(labels)
+            roc_info[m][ds] = get_roc_info(Labels, Scores)
+            pr_info[m][ds] = get_pr_info(Labels, Scores)
 
     # plot
     plt.style.use('fivethirtyeight')
@@ -66,7 +67,7 @@ def roc_plot_perfrom_table():
                                     **{'color': 'C{}'.format(i), 'hatch': '....', 'alpha': .4, 'line': '-.',
                                         'title': title})
     plot_legend(axes=axes, crv_lgd_hdl=hdl_crv, crv_info=roc_info, neo_lgd_hdl=None)
-    fig.savefig('./roc.tif', dpi=300)
+    fig.savefig('./plot/roc.tif', dpi=300)
 
     # pr plot
     fig, axes_ = plt.subplots(1, 3, figsize=[18, 6], dpi=100)
@@ -82,7 +83,7 @@ def roc_plot_perfrom_table():
                                     **{'color': 'C{}'.format(i), 'hatch': '....', 'alpha': .4, 'line': '-.',
                                         'title': title})
     plot_legend(axes=axes, crv_lgd_hdl=hdl_crv, crv_info=pr_info, neo_lgd_hdl=None)
-    fig.savefig('./pr.tif', dpi=300)
+    fig.savefig('./plot/pr.tif', dpi=300)
 
     table = collections.defaultdict(dict)
 
