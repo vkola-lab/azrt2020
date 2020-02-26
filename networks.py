@@ -274,6 +274,14 @@ class GAN:
                     out_string += '#'+metric+'#'+str(iqa_gen)
                 if plot:
                     GAN_test_plot(out_dir, idx, inputs_lo, output, inputs_hi, out_string)
+                print('ssim', 'immse', 'psnr', 'brisque', 'niqe', 'piqe')
+                # iqa_oris = np.asarray(iqa_oris)
+                # iqa_oris = iqa_oris.reshape(-1, 6)
+                print(iqa_oris)
+                print('brisque', 'niqe', 'piqe')
+                # iqa_3s = np.asarray(iqa_3s)
+                # iqa_3s = iqa_oris.reshape(-1, 3)
+                print(iqa_3s)
 
         # print('Done. Results saved in', out_dir)
         eng.quit()
@@ -337,7 +345,7 @@ class GAN:
             if not warmup_D:
                 self.optimizer_G.step()
 
-            if self.epoch % 1 == 0:
+            if self.epoch % 10 == 0 or (self.epoch % 10 == 0 and self.epoch > self.config["warm_D_epoch"]):
                 with open('log.txt', 'a') as f:
                     out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
                           % (self.epoch, self.config['epochs'], idx, len(self.train_p_dataloader), Routput.data.cpu().mean(),
