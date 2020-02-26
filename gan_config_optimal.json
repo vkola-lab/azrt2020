@@ -1,6 +1,6 @@
 {
     "G_lr": 0.0066112,
-    "epochs":11000,
+    "epochs":300,
     "Data_dir": "/data/datasets/ADNI_NoBack/",
     "D_lr": 0.01,
     "L1_norm_factor": 100,
