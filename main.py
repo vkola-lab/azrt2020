@@ -11,8 +11,10 @@ def gan_main():
     # after training, generate 1.5T* for CNN /data/datasets/ADNIP_NoBack/
     # ...
     gan = GAN('./gan_config_optimal.json', 0)
-    gan.train()
-    gan.validate()
+    #gan.train()
+    gan.epoch=20
+    gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, 20)))
+    gan.validate(plot=False)
     print('########Gan Trainig Done.########')
     #''' (108)
     # gan.optimal_epoch=0
