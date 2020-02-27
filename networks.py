@@ -1,4 +1,5 @@
 import os
+from os import path
 import sys
 import torch
 import torch.nn as nn
@@ -127,7 +128,7 @@ class GAN:
         self.config = read_json(config)
         self.netG = _netG(self.config["G_fil_num"]).cuda()
         self.netD = _netD(self.config["D_fil_num"]).cuda()
-        self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=0, epoch=190)
+        self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=6, epoch=99)
         if self.config["D_pth"]:
             self.netD.load_state_dict(torch.load(self.config["D_pth"]))
         if self.config["G_pth"]:
@@ -162,10 +163,8 @@ class GAN:
         return cnn
 
     def train(self):
-        try:
-            os.remove('log.txt')
-        except:
-            pass
+        self.log = open('log.txt', 'w')
+        self.log.close()
         self.G_lr, self.D_lr = self.config["G_lr"], self.config["D_lr"]
         self.optimizer_G = optim.SGD([ {'params': self.netG.conv1.parameters()},
                           {'params': self.netG.conv2.parameters()},
@@ -183,10 +182,11 @@ class GAN:
             self.train_model_epoch(warmup_G=cond1, warmup_D=cond2)
             if self.epoch % 10 == 0:
                 valid_metric = self.valid_model_epoch()
-                print('validation accuracy ', valid_metric)
+                with open('log.txt', 'a') as f:
+                    f.write('validation accuracy {} \n'.format(valid_metric))
+                print('validation accuracy {}'.format(valid_metric))
                 self.save_checkpoint(valid_metric)
         return self.valid_optimal_metric
-
 
     def generate(self):
         # generate & save 1.5T* images using MRIGAN
@@ -318,24 +318,33 @@ class GAN:
 
             if self.epoch % 10 == 0 or (self.epoch % 10 == 0 and self.epoch > self.config["warm_D_epoch"]):
                 with open('log.txt', 'a') as f:
-                    out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
+                    out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n'
                           % (self.epoch, self.config['epochs'], idx, len(self.train_p_dataloader), Routput.data.cpu().mean(),
-                             Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), 1000*loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item()))+'\n'
+                             Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
                     f.write(out)
-                print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
+                print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f'
                       % (self.epoch, self.config['epochs'], idx, len(self.train_p_dataloader), Routput.data.cpu().mean(),
-                         Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), 1000*loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item()))
+                         Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
 
     def valid_model_epoch(self):
         with torch.no_grad():
             self.cnn.model.train(False)
             valid_matrix = [[0, 0], [0, 0]]
-            for inputs, inputs_high, labels in self.valid_dataloader:
+            for idx, (inputs, inputs_high, labels) in enumerate(self.valid_dataloader):
                 inputs, labels = inputs.cuda(), labels.cuda()
                 output = self.netG(inputs) + inputs
+                if idx == 0:
+                    self.gen_output_image(output, self.epoch)
                 preds = self.cnn.model(output)
                 valid_matrix = matrix_sum(valid_matrix, get_confusion_matrix(preds, labels))
         return get_accu(valid_matrix)
+
+    def gen_output_image(self, tensor, epoch):
+        tensor = tensor.data.cpu().numpy()
+        if not os.path.exists('./output/'):
+            os.mkdir('./output/')
+        plt.imshow(tensor[0, 0, :, 100, :], cmap='gray', vmin=-1, vmax=2.5)
+        plt.savefig('./output/{}.png'.format(epoch))
 
     def get_checkpoint_dir(self):
         return self.checkpoint_dir
