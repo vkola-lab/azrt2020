@@ -1,4 +1,5 @@
 import os
+from os import path
 import sys
 import torch
 import torch.nn as nn
@@ -34,7 +35,7 @@ class CNN_Wrapper:
         if not os.path.exists(self.checkpoint_dir):
             os.mkdir(self.checkpoint_dir)
 
-    def train(self, lr, epochs):
+    def train(self, lr, epochs, verbose=0):
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr, betas=(0.5, 0.999))
         self.criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1, self.imbalanced_ratio])).cuda()
         self.optimal_valid_matrix = [[0, 0], [0, 0]]
@@ -43,9 +44,11 @@ class CNN_Wrapper:
         for self.epoch in range(epochs):
             self.train_model_epoch()
             valid_matrix = self.valid_model_epoch()
-            #print('{}th epoch validation confusion matrix:'.format(self.epoch), valid_matrix, 'eval_metric:', "%.4f" % self.eval_metric(valid_matrix))
+            if verbose >= 2:
+                print('{}th epoch validation confusion matrix:'.format(self.epoch), valid_matrix, 'eval_metric:', "%.4f" % self.eval_metric(valid_matrix))
             self.save_checkpoint(valid_matrix)
-        print('Best model saved at the {}th epoch:'.format(self.optimal_epoch), self.optimal_valid_metric, self.optimal_valid_matrix)
+        if verbose >= 2:
+            print('Best model saved at the {}th epoch:'.format(self.optimal_epoch), self.optimal_valid_metric, self.optimal_valid_matrix)
         return self.optimal_valid_metric
 
     def test(self):
@@ -110,14 +113,10 @@ class CNN_Wrapper:
         sample_weight, self.imbalanced_ratio = train_data.get_sample_weights()
         # the following if else blocks represent two ways of handling class imbalance issue
         if balanced == 1:
-            # use pytorch sampler to sample data with probability according to the count of each class
-            # so that each mini-batch has the same expectation counts of samples from each class
             sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight, len(sample_weight))
             self.train_dataloader = DataLoader(train_data, batch_size=batch_size, sampler=sampler)
             self.imbalanced_ratio = 1
         elif balanced == 0:
-            # sample data from the same probability, but
-            # self.imbalanced_ratio will be used in the weighted cross entropy loss to handle imbalanced issue
             self.train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
         self.valid_dataloader = DataLoader(valid_data, batch_size=batch_size, shuffle=False)
         self.test_dataloader = DataLoader(test_data, batch_size=batch_size, shuffle=False)
@@ -129,26 +128,24 @@ class GAN:
         self.config = read_json(config)
         self.netG = _netG(self.config["G_fil_num"]).cuda()
         self.netD = _netD(self.config["D_fil_num"]).cuda()
+        self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=6, epoch=99)
         if self.config["D_pth"]:
             self.netD.load_state_dict(torch.load(self.config["D_pth"]))
         if self.config["G_pth"]:
             self.netD.load_state_dict(torch.load(self.config["G_pth"]))
-        self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=4, epoch=108)
         self.checkpoint_dir = self.config["checkpoint_dir"] + 'gan/'
         if not os.path.exists(self.checkpoint_dir):
             os.mkdir(self.checkpoint_dir)
-        self.train_p_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='train_p'),
-                                           batch_size=self.config['batch_size_p'], shuffle=True)
+        self.prepare_dataloader()
 
-        dataset = GAN_Data(self.config['Data_dir'], seed=seed, stage='train_w')
+    def prepare_dataloader(self):
+        dataset = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_w')
         sample_weight = dataset.get_sample_weights()
         sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight, len(sample_weight))
         self.train_w_dataloader = DataLoader(dataset, batch_size=self.config['batch_size_w'], sampler=sampler)
-    
-        self.valid_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='valid'),
-                                           batch_size=1, shuffle=False)
-        self.test_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=seed, stage='test'),
-                                           batch_size=1, shuffle=False)
+        self.train_p_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_p'), batch_size=self.config['batch_size_p'], shuffle=True)
+        self.valid_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='valid'), batch_size=1, shuffle=False)
+        self.test_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='test'), batch_size=1, shuffle=False)
 
     def initial_CNN(self, json_file, exp_idx, epoch):
         cnn_setting = read_json(json_file)['cnn']
@@ -166,10 +163,8 @@ class GAN:
         return cnn
 
     def train(self):
-        try:
-            os.remove('log.txt')
-        except:
-            pass
+        self.log = open('log.txt', 'w')
+        self.log.close()
         self.G_lr, self.D_lr = self.config["G_lr"], self.config["D_lr"]
         self.optimizer_G = optim.SGD([ {'params': self.netG.conv1.parameters()},
                           {'params': self.netG.conv2.parameters()},
@@ -182,22 +177,15 @@ class GAN:
         self.crossentropy = nn.CrossEntropyLoss().cuda()
         self.valid_optimal_metric, self.optimal_epoch = 0, -1
         for self.epoch in range(self.config['epochs']):
-            cond1 = self.epoch < self.config["warm_G_epoch"]
+            cond1 = self.epoch<self.config["warm_G_epoch"]
             cond2 = self.config["warm_G_epoch"]<=self.epoch<=self.config["warm_D_epoch"]
-            # print(self.epoch, self.config["warm_G_epoch"], self.config["warm_D_epoch"])
-            # print(cond1, cond2)
             self.train_model_epoch(warmup_G=cond1, warmup_D=cond2)
-            # print('epoch', self.epoch, 'values:')
-            # print('\tTraining set\'s SSIM:', valid_metric)
             if self.epoch % 10 == 0:
                 valid_metric = self.valid_model_epoch()
-                #if self.epoch == self.config["warm_G_epoch"]:
-                    #print('saving image after warmup G')
-                    #self.validate()
-                #self.validate()
+                with open('log.txt', 'a') as f:
+                    f.write('validation accuracy {} \n'.format(valid_metric))
+                print('validation accuracy {}'.format(valid_metric))
                 self.save_checkpoint(valid_metric)
-
-        # print('(GAN) Best validation metric at the {}th epoch:'.format(self.optimal_epoch), self.valid_optimal_metric)
         return self.valid_optimal_metric
 
     def generate(self):
@@ -282,101 +270,81 @@ class GAN:
                 # iqa_3s = np.asarray(iqa_3s)
                 # iqa_3s = iqa_oris.reshape(-1, 3)
                 print(iqa_3s)
-
-        # print('Done. Results saved in', out_dir)
         eng.quit()
 
     def train_model_epoch(self, warmup_G=False, warmup_D=False):
-        # print("warmup_G", warmup_G, "warmup_D", warmup_D)
         self.netG.train(True)
         self.netD.train(True)
-        #Error may raise when input is actually smaller than batch size
-        #Currently fixed by using real time size. Or can fix by discard small input
-        #label = torch.FloatTensor(self.config["batch_size"])
-        for idx, ((inputs_lo, inputs_hi, _), (inputs_w_lo, _, AD_label)) in enumerate(zip(self.train_p_dataloader, self.train_w_dataloader)):
-        # for idx, (inputs_w_lo, _, AD_label) in enumerate(self.train_w_dataloader):
-            # inputs_w_lo = inputs_w_lo.cuda()
-            # output = self.netG(inputs_w_lo[0:1])
-            # del output
-            # print('finished')
-
+        for idx, ((patch_lo, patch_hi), (whole_lo, AD_label)) in enumerate(zip(self.train_p_dataloader, self.train_w_dataloader)):
             # get gradient for D network with fake data
-            inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
             self.netD.zero_grad()
-            Mask = self.netG(inputs_lo)
-            Output = inputs_lo + Mask
+            patch_lo, patch_hi = patch_lo.cuda(), patch_hi.cuda()
+            Mask = self.netG(patch_lo)
+            Output = patch_lo + Mask
             Foutput = self.netD(Output.detach())
             label = torch.FloatTensor(Foutput.shape[0])
             Flabel = label.fill_(0).cuda()
             loss_D_F = self.criterion(Foutput, Flabel)
             loss_D_F.backward()
             # get gradient for D network with real data
-            Routput = self.netD(inputs_hi)
+            Routput = self.netD(patch_hi)
             Rlabel = label.fill_(1).cuda()
             loss_D_R = self.criterion(Routput, Rlabel)
             loss_D_R.backward()
             if not warmup_G:
                 self.optimizer_D.step()
-
+            #######################################
             # get gradient for G network
             self.netG.zero_grad()
             Goutput = self.netD(Output)
-            #######################################
             Glabel = label.fill_(1).cuda()
             loss_G_GAN = self.criterion(Goutput, Glabel)
             # get gradient for G network with L1 norm between real and fake
             loss_G_dif = torch.mean(torch.abs(Mask))
             # forward output to CNN to get AD loss
             AD_loss = 0
-            inputs_w_lo, AD_label = inputs_w_lo.cuda(), AD_label.cuda() 
-            for a in range(inputs_w_lo.shape[0]):
-                input_w_lo, AD_l = inputs_w_lo[a:a+1], AD_label[a:a+1]
-                pred_w = self.cnn.model(self.netG(input_w_lo))
-                AD_loss += self.crossentropy(pred_w, AD_l)
-            # print(Output.element_size()*Output.nelement()/1000000000)
-
+            whole_lo, AD_label = whole_lo.cuda(), AD_label.cuda()
+            for a in range(whole_lo.shape[0]):
+                whole_l, AD_l = whole_lo[a:a+1], AD_label[a:a+1]
+                pred = self.cnn.model(whole_l + self.netG(whole_l))
+                AD_loss += self.crossentropy(pred, AD_l)
             if warmup_G:
                 loss_G = self.config["L1_norm_factor"] * loss_G_dif
             else:
-                loss_G = loss_G_GAN + self.config["L1_norm_factor"] * loss_G_dif + \
-                         self.config['AD_factor'] * AD_loss
-            loss_G.backward(retain_graph=True)
-
+                loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_GAN + self.config['AD_factor'] * AD_loss
+            loss_G.backward()
             if not warmup_D:
                 self.optimizer_G.step()
 
             if self.epoch % 10 == 0 or (self.epoch % 10 == 0 and self.epoch > self.config["warm_D_epoch"]):
                 with open('log.txt', 'a') as f:
-                    out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
+                    out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n'
                           % (self.epoch, self.config['epochs'], idx, len(self.train_p_dataloader), Routput.data.cpu().mean(),
-                             Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), 1000*loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item()))+'\n'
+                             Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
                     f.write(out)
-                print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f'
+                print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f'
                       % (self.epoch, self.config['epochs'], idx, len(self.train_p_dataloader), Routput.data.cpu().mean(),
-                         Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), 1000*loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item()))
-            del Output, inputs_lo, inputs_hi, Mask, Foutput, label, Flabel, loss_D_F, Routput, Rlabel, loss_D_R, Goutput, Glabel, loss_G_GAN, loss_G_dif, AD_loss, pred_w
+                         Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
 
     def valid_model_epoch(self):
-        # calculate validaton accuracy
         with torch.no_grad():
             self.cnn.model.train(False)
             valid_matrix = [[0, 0], [0, 0]]
-            for inputs, inputs_high, labels in self.valid_dataloader:
+            for idx, (inputs, inputs_high, labels) in enumerate(self.valid_dataloader):
                 inputs, labels = inputs.cuda(), labels.cuda()
-                preds = self.cnn.model(inputs)
+                output = self.netG(inputs) + inputs
+                if idx == 0:
+                    self.gen_output_image(output, self.epoch)
+                preds = self.cnn.model(output)
                 valid_matrix = matrix_sum(valid_matrix, get_confusion_matrix(preds, labels))
         return get_accu(valid_matrix)
-        # calculate ssim, brisque, niqe
-        # with torch.no_grad():
-        #     self.netG.train(False)
-        #     valid_metric = []
-        #     for inputs_lo, inputs_hi, label in self.valid_dataloader:
-        #         inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi
-        #         Mask = self.netG(inputs_lo)
-        #         output = inputs_lo + Mask
-        #         ssim = SSIM(output.squeeze().cpu().numpy(), inputs_hi.squeeze().numpy())
-        #         valid_metric.append(ssim)
-        # return sum(valid_metric) / len(valid_metric)
+
+    def gen_output_image(self, tensor, epoch):
+        tensor = tensor.data.cpu().numpy()
+        if not os.path.exists('./output/'):
+            os.mkdir('./output/')
+        plt.imshow(tensor[0, 0, :, 100, :], cmap='gray', vmin=-1, vmax=2.5)
+        plt.savefig('./output/{}.png'.format(epoch))
 
     def get_checkpoint_dir(self):
         return self.checkpoint_dir

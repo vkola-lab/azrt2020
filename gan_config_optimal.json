@@ -1,0 +1,19 @@
+{
+    "G_lr": 0.0066112,
+    "G_pth": "",
+    "G_fil_num": 10,
+    "warm_G_epoch": 10,
+    "D_lr": 0.01,
+    "D_pth": "./checkpoint_dir/gan/D_level1.pth",
+    "D_fil_num": 17,
+    "warm_D_epoch": 0,
+    "epochs": 2000,
+    "Data_dir": "/data/datasets/ADNI_NoBack/",
+    "L1_norm_factor": 1,
+    "AD_factor": 1,
+    "batch_size_p": 13,
+    "batch_size_w": 1,
+    "checkpoint_dir": "./checkpoint_dir/",
+    "drop_rate": 0.725430,
+    "balanced": 0
+}

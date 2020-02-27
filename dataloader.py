@@ -117,19 +117,7 @@ class PatchGenerator:
         return patches
 
 
-class GAN_Data:
-
-    """
-    stage=train   load pairwise 1.5T and 3T patch sampled from same location from same patient
-    stage=valid   use a specific validation loss to save model checkpoint
-    stage=test    leave some portion as testing set to directly compare 1.5T, 1.5T+ and 3T
-
-    Todo;
-    1. selectively pick good quality 3T image based on non-reference image quality
-    2. G model evaluation, what validation loss to use? maybe SSIM
-    3.
-    """
-
+class GAN_Data(Dataset):
     def __init__(self, Data_dir, stage, ratio=(0.6, 0.2, 0.2), seed=1000):
         random.seed(seed)
         self.Data_dir = Data_dir
@@ -170,7 +158,9 @@ class GAN_Data:
         data_hi = np.load(self.Data_dir + self.Data_list_hi[index]).astype(np.float32)
         if self.stage == 'train_p':
             patch_lo, patch_hi = self.patchsampler.random_sample(data_lo, data_hi)
-            return np.expand_dims(patch_lo, axis=0), np.expand_dims(patch_hi, axis=0), self.Label_list[index]
+            return np.expand_dims(patch_lo, axis=0), np.expand_dims(patch_hi, axis=0)
+        elif self.stage == 'train_w':
+            return np.expand_dims(data_lo, axis=0), self.Label_list[index]
         else:
             return np.expand_dims(data_lo, axis=0), np.expand_dims(data_hi, axis=0), self.Label_list[index]
 
