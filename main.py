@@ -51,13 +51,14 @@ def cnn_main(repe_time, model_name, cnn_setting):
         cnn.test()
 
 if __name__ == "__main__":
-    gan = gan_main()
+    # gan = gan_main()
 #     gan.eval_iqa_all(['brisque', 'niqe'])
 #     print('########IQA Done.########')
 
-#     cnn_config = read_json('./cnn_config.json')
-#     cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
-#     print('########CNN Done.########')
+    cnn_config = read_json('./cnn_config.json')
+    cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
+    print('########CNN Done.########')
+    
 #     cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
 #     print('########CNMP Done.########')
 #     roc_plot_perfrom_table()

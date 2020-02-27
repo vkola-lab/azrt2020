@@ -134,21 +134,23 @@ class GAN_Data:
         random.seed(seed)
         self.Data_dir = Data_dir
         Data_list0 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_NL.txt')
-        Data_list1 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_MCI.txt')
+        #Data_list1 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_MCI.txt')
         Data_list2 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_AD.txt')
         Data_list3 = read_txt('./lookuptxt/', 'ADNI_3T_NL.txt')
-        Data_list4 = read_txt('./lookuptxt/', 'ADNI_3T_MCI.txt')
+        #Data_list4 = read_txt('./lookuptxt/', 'ADNI_3T_MCI.txt')
         Data_list5 = read_txt('./lookuptxt/', 'ADNI_3T_AD.txt')
-        self.Data_list_lo = Data_list0 + Data_list1 + Data_list2
-        self.Data_list_hi = Data_list3 + Data_list4 + Data_list5
-        self.Label_list = [0]*len(Data_list0) + [2]*len(Data_list1) + [1]*len(Data_list2)
+        self.Data_list_lo = Data_list0 + Data_list2
+        self.Data_list_hi = Data_list3 + Data_list5
+        self.Label_list = [0]*len(Data_list0) + [1]*len(Data_list2)
         self.stage = stage
         self.length = len(self.Data_list_lo)
         self.patchsampler = PatchGenerator(patch_size = 47)
         idxs = list(range(self.length))
         random.shuffle(idxs)
         split1, split2 = int(self.length*ratio[0]), int(self.length*(ratio[0]+ratio[1]))
-        if self.stage == 'train':
+        if self.stage == 'train_p':
+            self.index_list = idxs[:split1]
+        elif self.stage == 'train_w':
             self.index_list = idxs[:split1]
         elif self.stage == 'valid':
             self.index_list = idxs[split1:split2]
@@ -166,24 +168,38 @@ class GAN_Data:
         index = self.index_list[idx]
         data_lo = np.load(self.Data_dir + self.Data_list_lo[index]).astype(np.float32)
         data_hi = np.load(self.Data_dir + self.Data_list_hi[index]).astype(np.float32)
-        if self.stage == 'train':
+        if self.stage == 'train_p':
             patch_lo, patch_hi = self.patchsampler.random_sample(data_lo, data_hi)
             return np.expand_dims(patch_lo, axis=0), np.expand_dims(patch_hi, axis=0), self.Label_list[index]
         else:
             return np.expand_dims(data_lo, axis=0), np.expand_dims(data_hi, axis=0), self.Label_list[index]
 
+    def get_sample_weights(self):
+        train_labels = [self.Label_list[index] for index in self.index_list]
+        count, count0, count1 = float(len(train_labels)), float(train_labels.count(0)), float(train_labels.count(1))
+        weights = [count / count0 if i == 0 else count / count1 for i in train_labels]
+        return weights
+
 
 if __name__ == "__main__":
-    dataset = GAN_Data(Data_dir='/data/datasets/ADNI_NoBack/', stage='test')
-    dataloader = DataLoader(dataset, batch_size=10)
-    for scan1, scan2, label in dataloader:
-        print(scan1.shape, scan2.shape, label.shape)
-        numpy_label = label.numpy()
-        index = torch.LongTensor(np.argwhere(numpy_label!=2).squeeze())
-        print(label, index)
-        selected_scan = torch.index_select(scan1, 0, index)
-        selected_label = torch.index_select(label, 0, index)
-        print(selected_scan.shape, selected_label)
+    dataset = GAN_Data(Data_dir='/data/datasets/ADNI_NoBack/', stage='train_w')
+    sample_weight = dataset.get_sample_weights()
+    sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight, len(sample_weight))
+    train_w_dataloader = DataLoader(dataset, batch_size=3, sampler=sampler)
+    for scan1, scan2, label in train_w_dataloader:
+        print(label)
+    for scan1, scan2, label in train_w_dataloader:
+        print(label)
+
+    # dataloader = DataLoader(dataset, batch_size=10)
+    # for scan1, scan2, label in dataloader:
+    #     print(scan1.shape, scan2.shape, label.shape)
+    #     numpy_label = label.numpy()
+    #     index = torch.LongTensor(np.argwhere(numpy_label!=2).squeeze())
+    #     print(label, index)
+    #     selected_scan = torch.index_select(scan1, 0, index)
+    #     selected_label = torch.index_select(label, 0, index)
+    #     print(selected_scan.shape, selected_label)
 
     # dataset = Data(Data_dir='/data/datasets/ADNI_NoBack/', class1='ADNI_1.5T_GAN_NL', class2='ADNI_1.5T_GAN_AD', stage='train')
     # labels = []

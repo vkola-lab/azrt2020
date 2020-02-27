@@ -75,7 +75,6 @@ class Vanila_CNN_Lite(nn.Module):
         x = self.classifier(x)
         return x
 
-
 # define the generator
 class _netG(nn.Module):
     def __init__(self, num):
