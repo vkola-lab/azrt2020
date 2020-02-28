@@ -3,9 +3,11 @@ import torch
 import matlab
 import csv
 import os
+import shutil
 import torch.nn as nn
 from torch.autograd import Variable
 import matplotlib.pyplot as plt
+import matlab.engine
 from numpy import random
 import json
 from skimage import img_as_float
@@ -43,6 +45,7 @@ for i in range(4):
     print('p_value:', p)
 #'''
 
+
 def timeit(method):
     def timed(*args, **kw):
         ts = time.time()
@@ -70,7 +73,9 @@ def iqa_tensor(tensor, eng, filename, metric, target):
         end = tensor.shape[side]-30
         step = (end-start)//10
         vals = []
-        for slice_idx in range(start, end, step):
+        # for slice_idx in range(start, end, step):
+        # for slice_idx in [50, 80, 110]:
+        for slice_idx in [50]:
             if side == 0:
                 img = tensor[slice_idx, :, :]
             elif side == 1:
@@ -78,11 +83,14 @@ def iqa_tensor(tensor, eng, filename, metric, target):
             else:
                 img = tensor[:, :, slice_idx]
             img = matlab.double(img.tolist())
-
             vals += [func(img)]
-        out += [vals]
-    np.save(target+filename+'$'+metric, out)
-    return np.asarray(out)
+        # out += [vals]
+        out += vals
+        break
+    val_avg = sum(out) / len(out)
+    #np.save(target+filename+'$'+metric, out)
+    # return np.asarray(out)
+    return val_avg
 
 
 def immse(tensor1, tensor2, zoom, eng):
