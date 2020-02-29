@@ -133,10 +133,11 @@ class GAN:
             self.netD.load_state_dict(torch.load(self.config["D_pth"]))
         if self.config["G_pth"]:
             self.netD.load_state_dict(torch.load(self.config["G_pth"]))
-        self.checkpoint_dir = self.config["checkpoint_dir"] + 'gan/'
+        self.checkpoint_dir = self.config["checkpoint_dir"]
         if not os.path.exists(self.checkpoint_dir):
             os.mkdir(self.checkpoint_dir)
         self.prepare_dataloader()
+        self.log_name = self.config["log_name"]
 
     def prepare_dataloader(self):
         dataset = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_w')
@@ -163,7 +164,7 @@ class GAN:
         return cnn
 
     def train(self):
-        self.log = open('log.txt', 'w')
+        self.log = open(self.log_name, 'w')
         self.log.close()
         self.G_lr, self.D_lr = self.config["G_lr"], self.config["D_lr"]
         self.optimizer_G = optim.SGD([ {'params': self.netG.conv1.parameters()},
@@ -182,7 +183,7 @@ class GAN:
             self.train_model_epoch(warmup_G=cond1, warmup_D=cond2)
             if self.epoch % 10 == 0:
                 valid_metric = self.valid_model_epoch()
-                with open('log.txt', 'a') as f:
+                with open(self.log_name, 'a') as f:
                     f.write('validation accuracy {} \n'.format(valid_metric))
                 print('validation accuracy {}'.format(valid_metric))
                 self.save_checkpoint(valid_metric)
@@ -302,22 +303,23 @@ class GAN:
             # get gradient for G network with L1 norm between real and fake
             loss_G_dif = torch.mean(torch.abs(Mask))
             # forward output to CNN to get AD loss
-            AD_loss = 0
             whole_lo, AD_label = whole_lo.cuda(), AD_label.cuda()
+            AD_loss = 0
             for a in range(whole_lo.shape[0]):
                 whole_l, AD_l = whole_lo[a:a+1], AD_label[a:a+1]
                 pred = self.cnn.model(whole_l + self.netG(whole_l))
-                AD_loss += self.crossentropy(pred, AD_l)
+                AD_loss += self.config['AD_factor'] * self.crossentropy(pred, AD_l)
+                # AD_loss.backward()
             if warmup_G:
                 loss_G = self.config["L1_norm_factor"] * loss_G_dif
             else:
-                loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_GAN + self.config['AD_factor'] * AD_loss
+                loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_GAN
             loss_G.backward()
             if not warmup_D:
                 self.optimizer_G.step()
 
             if self.epoch % 10 == 0 or (self.epoch % 10 == 0 and self.epoch > self.config["warm_D_epoch"]):
-                with open('log.txt', 'a') as f:
+                with open(self.log_name, 'a') as f:
                     out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n'
                           % (self.epoch, self.config['epochs'], idx, len(self.train_p_dataloader), Routput.data.cpu().mean(),
                              Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))

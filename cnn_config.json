@@ -16,5 +16,14 @@
         "Data_dir":             "./ADNIP_NoBack/",
         "learning_rate":        0.0001,
         "train_epochs":         200
+    },
+    "standard": {
+        "fil_num":              20,
+        "drop_rate":            0.5,
+        "batch_size":           16,
+        "balanced":             0,
+        "Data_dir":             "/data/datasets/ADNI_NoBack/",
+        "learning_rate":        0.0001,
+        "train_epochs":         200
     }
 }

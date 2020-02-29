@@ -1,6 +1,9 @@
 from dataloader import Data
-from networks import CNN_Wrapper, CNN, GAN
+from networks import CNN_Wrapper, GAN
 from utils import read_json
+import numpy as np
+from PIL import Image
+import cv2
 import torch
 import sys
 sys.path.insert(1, './plot/')
@@ -12,10 +15,11 @@ def gan_main():
     # ...
     gan = GAN('./gan_config_optimal.json', 0)
     #gan.train()
-    gan.epoch=20
-    gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, 20)))
-    gan.validate(plot=False)
-    print('########Gan Trainig Done.########')
+    gan.epoch=1040
+    gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, gan.epoch)))
+    gan.generate()
+    # gan.validate(plot=False)
+    # print('########Gan Trainig Done.########')
     #''' (108)
     # gan.optimal_epoch=0
     # gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, gan.optimal_epoch)))
@@ -35,6 +39,15 @@ def gan_main():
     return gan
 
 
+def niqe_trend():
+    for i in range(0, 2000, 10):
+        filename = './output/{}.png'.format(i)
+        img = Image.open(filename)
+        img = np.asarray(img)[:, :, 0]
+        # matlab.double()
+        print(img.shape)
+
+
 def cnn_main(repe_time, model_name, cnn_setting):
     for exp_idx in range(repe_time):
         cnn = CNN_Wrapper(fil_num        = cnn_setting['fil_num'],
@@ -51,15 +64,19 @@ def cnn_main(repe_time, model_name, cnn_setting):
         cnn.test()
 
 if __name__ == "__main__":
-    # gan = gan_main()
+    gan = gan_main()
 #     gan.eval_iqa_all(['brisque', 'niqe'])
 #     print('########IQA Done.########')
 
-    cnn_config = read_json('./cnn_config.json')
-    cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
-    print('########CNN Done.########')
-    
-#     cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
+    # cnn_config = read_json('./cnn_config.json')
+    # cnn_main(5, 'cnnp', cnn_config['cnn']) # train, valid and test CNNP model
+
+
+    # cnn_main(1, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
+    # print('########CNN Done.########')
+
+
+#     
 #     print('########CNMP Done.########')
-#     roc_plot_perfrom_table()
+    # roc_plot_perfrom_table()
 #     print('########Finished.########')

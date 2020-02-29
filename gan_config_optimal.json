@@ -12,8 +12,9 @@
     "L1_norm_factor": 1,
     "AD_factor": 1,
     "batch_size_p": 13,
-    "batch_size_w": 1,
-    "checkpoint_dir": "./checkpoint_dir/",
+    "batch_size_w": 10,
+    "checkpoint_dir": "./checkpoint_dir/gan_test/",
     "drop_rate": 0.725430,
-    "balanced": 0
+    "balanced": 0,
+    "log_name": "log_test.txt" 
 }
