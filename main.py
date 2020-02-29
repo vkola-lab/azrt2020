@@ -3,7 +3,6 @@ from networks import CNN_Wrapper, GAN
 from utils import read_json
 import numpy as np
 from PIL import Image
-import cv2
 from utils import read_json, iqa_tensor, p_val
 import torch
 import sys
@@ -24,7 +23,6 @@ def gan_main():
     #gan.train()
     gan.epoch=1040
     gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, gan.epoch)))
-    gan.generate()
     # gan.validate(plot=False)
     # print('########Gan Trainig Done.########')
     #''' (108)
@@ -39,8 +37,8 @@ def gan_main():
     #     gan.eval_iqa_all(zoom=False, metric=m)
     #     gan.eval_iqa_all(zoom=True, metric=m)
     # gan.test(zoom=True, metric='piqe')
-    #gan.generate() # create 1.5T+ numpy array
-    #print('########Generation Done.########')
+    gan.generate() # create 1.5T+ numpy array
+    print('########Generation Done.########')
     # gan.table()
     # gan_boxplot()
     return gan
@@ -63,14 +61,15 @@ def eval_iqa_all(metrics=['brisque']):
     names = ['ADNI', 'NACC', 'AIBL']
 
     sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/AIBL_NoBack/"]
-    data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
+    data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='test', shuffle=False)]
     data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
     data += [Data(sources[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
     dataloaders = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
 
     data = []
-    targets = ["/home/sq/gan2020/ADNIP_NoBack/", "/home/sq/gan2020/NACCP_NoBack/", "/home/sq/gan2020/AIBLP_NoBack/"]
-    data += [Data(targets[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
+    # targets = ["/home/sq/gan2020/ADNIP_NoBack/", "/home/sq/gan2020/NACCP_NoBack/", "/home/sq/gan2020/AIBLP_NoBack/"]
+    targets = ["./ADNIP_NoBack/", "./NACCP_NoBack/", "./AIBLP_NoBack/"]
+    data += [Data(targets[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='test', shuffle=False)]
     data += [Data(targets[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
     data += [Data(targets[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
     dataloaders_p = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
@@ -133,9 +132,10 @@ def cnn_main(repe_time, model_name, cnn_setting):
 
 if __name__ == "__main__":
 
-    gan = gan_main()
-#     gan.eval_iqa_all(['brisque', 'niqe'])
-#     print('########IQA Done.########')
+    # gan = gan_main()
+    #
+    # eval_iqa_all(['brisque', 'niqe'])
+    # print('########IQA Done.########')
 
     # cnn_config = read_json('./cnn_config.json')
     # cnn_main(5, 'cnnp', cnn_config['cnn']) # train, valid and test CNNP model
@@ -144,19 +144,12 @@ if __name__ == "__main__":
     # cnn_main(1, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
     # print('########CNN Done.########')
 
+#
 
-#     
-
-    # gan = gan_main()
-    eval_iqa_all(['niqe'])
-    print('########IQA Done.########')
-
-    # cnn_config = read_json('./cnn_config.json')
-    # cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
-    # print('########CNN Done.########')
-
-#     cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
-
-#     print('########CNMP Done.########')
+    cnn_config = read_json('./cnn_config.json')
+    cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
+    print('########CNN Done.########')
+    cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
+    print('########CNMP Done.########')
     # roc_plot_perfrom_table()
 #     print('########Finished.########')
