@@ -20,37 +20,11 @@ def gan_main():
     # after training, generate 1.5T* for CNN /data/datasets/ADNIP_NoBack/
     # ...
     gan = GAN('./gan_config_optimal.json', 0)
-    #gan.train()
-    gan.epoch=1040
-    gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, gan.epoch)))
-    # gan.validate(plot=False)
-    # print('########Gan Trainig Done.########')
-    #''' (108)
-    # gan.optimal_epoch=0
-    # gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, gan.optimal_epoch)))
-    # print(gan.valid_model_epoch())
-    #gan.test(False)
-    # gan.eval_iqa(zoom=False, metric='brisque')
-    # gan.eval_iqa(zoom=True, metric='brisque')
-    # metrics = ['brisque', 'niqe', 'piqe']
-    # for m in metrics:
-    #     gan.eval_iqa_all(zoom=False, metric=m)
-    #     gan.eval_iqa_all(zoom=True, metric=m)
-    # gan.test(zoom=True, metric='piqe')
-    gan.generate() # create 1.5T+ numpy array
-    print('########Generation Done.########')
-    # gan.table()
-    # gan_boxplot()
+    gan.train()
+    gan.generate()
+    # gan.epoch=1040
+    # gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, gan.epoch)))
     return gan
-
-
-def niqe_trend():
-    for i in range(0, 2000, 10):
-        filename = './output/{}.png'.format(i)
-        img = Image.open(filename)
-        img = np.asarray(img)[:, :, 0]
-        # matlab.double()
-        print(img.shape)
 
 
 def eval_iqa_all(metrics=['brisque']):
@@ -132,7 +106,7 @@ def cnn_main(repe_time, model_name, cnn_setting):
 
 if __name__ == "__main__":
 
-    # gan = gan_main()
+    gan = gan_main()
     #
     # eval_iqa_all(['brisque', 'niqe'])
     # print('########IQA Done.########')
@@ -146,10 +120,10 @@ if __name__ == "__main__":
 
 #
 
-    cnn_config = read_json('./cnn_config.json')
-    cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
-    print('########CNN Done.########')
-    cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
-    print('########CNMP Done.########')
+    # cnn_config = read_json('./cnn_config.json')
+    # cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
+    # print('########CNN Done.########')
+    # cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
+    # print('########CNMP Done.########')
     # roc_plot_perfrom_table()
-#     print('########Finished.########')
+    # print('########Finished.########')

@@ -31,12 +31,12 @@ class CNN_Wrapper:
         self.eval_metric = get_accu if metric == 'accuracy' else get_MCC
         self.model = Vanila_CNN_Lite(fil_num=fil_num, drop_rate=drop_rate).cuda()
         self.prepare_dataloader(batch_size, balanced, Data_dir)
+        self.optimizer = optim.Adam(self.model.parameters(), lr=0.0001, betas=(0.5, 0.999))
         self.checkpoint_dir = './checkpoint_dir/{}_exp{}/'.format(self.model_name, exp_idx)
         if not os.path.exists(self.checkpoint_dir):
             os.mkdir(self.checkpoint_dir)
 
     def train(self, lr, epochs, verbose=0):
-        self.optimizer = optim.Adam(self.model.parameters(), lr=lr, betas=(0.5, 0.999))
         self.criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1, self.imbalanced_ratio])).cuda()
         self.optimal_valid_matrix = [[0, 0], [0, 0]]
         self.optimal_valid_metric = 0
@@ -123,12 +123,17 @@ class CNN_Wrapper:
 
 
 class GAN:
+    # 1. Larger input for classifier
+    #       Already done (√)
+    # 2. Larger validation set
+    #       Comes from the CNN's validation set+train set(?), instead of the 82 cases (√)
+    # 3. Train CNN in process & use Trained CNN (CNN*) directly (√?)
     def __init__(self, config, seed):
         self.seed = seed
         self.config = read_json(config)
         self.netG = _netG(self.config["G_fil_num"]).cuda()
         self.netD = _netD(self.config["D_fil_num"]).cuda()
-        self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=6, epoch=99)
+        self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=0, epoch=100)
         if self.config["D_pth"]:
             self.netD.load_state_dict(torch.load(self.config["D_pth"]))
         if self.config["G_pth"]:
@@ -138,15 +143,10 @@ class GAN:
             os.mkdir(self.checkpoint_dir)
         self.prepare_dataloader()
         self.log_name = self.config["log_name"]
+        self.eng = matlab.engine.start_matlab()
 
     def prepare_dataloader(self):
-        dataset = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_w')
-        sample_weight = dataset.get_sample_weights()
-        sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight, len(sample_weight))
-        self.train_w_dataloader = DataLoader(dataset, batch_size=self.config['batch_size_w'], sampler=sampler)
-        self.train_p_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_p'), batch_size=self.config['batch_size_p'], shuffle=True)
-        self.valid_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='valid'), batch_size=1, shuffle=False)
-        self.test_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='test'), batch_size=1, shuffle=False)
+        self.train_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_p'), batch_size=self.config['batch_size_p'], shuffle=True)
 
     def initial_CNN(self, json_file, exp_idx, epoch):
         cnn_setting = read_json(json_file)['cnn']
@@ -159,7 +159,7 @@ class GAN:
                         seed            = 1000,
                         model_name      = 'cnn_gan',
                         metric          = 'accuracy')
-        cnn.model.train(False)
+        cnn.model.train(True)
         cnn.model.load_state_dict(torch.load('./checkpoint_dir/cnn_exp{}/cnn_{}.pth'.format(exp_idx, epoch)))
         return cnn
 
@@ -263,20 +263,19 @@ class GAN:
                     out_string += '#'+metric+'#'+str(iqa_gen)
                 if plot:
                     GAN_test_plot(out_dir, idx, inputs_lo, output, inputs_hi, out_string)
-                print('ssim', 'immse', 'psnr', 'brisque', 'niqe', 'piqe')
-                # iqa_oris = np.asarray(iqa_oris)
-                # iqa_oris = iqa_oris.reshape(-1, 6)
-                print(iqa_oris)
-                print('brisque', 'niqe', 'piqe')
-                # iqa_3s = np.asarray(iqa_3s)
-                # iqa_3s = iqa_oris.reshape(-1, 3)
-                print(iqa_3s)
+            iqa_oris = np.asarray(iqa_oris)
+            iqa_oris = iqa_oris.reshape(-1, 6)
+            # print(iqa_oris)
+            iqa_3s = np.asarray(iqa_3s)
+            iqa_3s = iqa_3s.reshape(-1, 3)
+            # print(iqa_3s)
         eng.quit()
 
     def train_model_epoch(self, warmup_G=False, warmup_D=False):
         self.netG.train(True)
+        self.cnn.model.train(True)
         self.netD.train(True)
-        for idx, ((patch_lo, patch_hi), (whole_lo, AD_label)) in enumerate(zip(self.train_p_dataloader, self.train_w_dataloader)):
+        for idx, ((patch_lo, patch_hi), (whole_lo, AD_label)) in enumerate(zip(self.train_dataloader, self.cnn.train_dataloader)):
             # get gradient for D network with fake data
             self.netD.zero_grad()
             patch_lo, patch_hi = patch_lo.cuda(), patch_hi.cuda()
@@ -302,17 +301,18 @@ class GAN:
             loss_G_GAN = self.criterion(Goutput, Glabel)
             # get gradient for G network with L1 norm between real and fake
             loss_G_dif = torch.mean(torch.abs(Mask))
-            # forward output to CNN to get AD loss
-            whole_lo, AD_label = whole_lo.cuda(), AD_label.cuda()
-            AD_loss = 0
-            for a in range(whole_lo.shape[0]):
-                whole_l, AD_l = whole_lo[a:a+1], AD_label[a:a+1]
-                pred = self.cnn.model(whole_l + self.netG(whole_l))
-                AD_loss += self.config['AD_factor'] * self.crossentropy(pred, AD_l)
-                # AD_loss.backward()
+            AD_loss = torch.tensor(0)
             if warmup_G:
                 loss_G = self.config["L1_norm_factor"] * loss_G_dif
             else:
+                # forward output to CNN to get AD loss
+                whole_lo, AD_label = whole_lo.cuda(), AD_label.cuda()
+                for a in range(whole_lo.shape[0]):
+                    whole_l, AD_l = whole_lo[a:a+1], AD_label[a:a+1]
+                    pred = self.cnn.model(whole_l + self.netG(whole_l))
+                    AD_loss = self.config['AD_factor'] * self.crossentropy(pred, AD_l)
+                    AD_loss.backward()
+                self.cnn.optimizer.step()
                 loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_GAN
             loss_G.backward()
             if not warmup_D:
@@ -321,18 +321,18 @@ class GAN:
             if self.epoch % 10 == 0 or (self.epoch % 10 == 0 and self.epoch > self.config["warm_D_epoch"]):
                 with open(self.log_name, 'a') as f:
                     out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n'
-                          % (self.epoch, self.config['epochs'], idx, len(self.train_p_dataloader), Routput.data.cpu().mean(),
+                          % (self.epoch, self.config['epochs'], idx, len(self.train_dataloader), Routput.data.cpu().mean(),
                              Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
                     f.write(out)
                 print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f'
-                      % (self.epoch, self.config['epochs'], idx, len(self.train_p_dataloader), Routput.data.cpu().mean(),
+                      % (self.epoch, self.config['epochs'], idx, len(self.train_dataloader), Routput.data.cpu().mean(),
                          Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
 
     def valid_model_epoch(self):
         with torch.no_grad():
             self.cnn.model.train(False)
             valid_matrix = [[0, 0], [0, 0]]
-            for idx, (inputs, inputs_high, labels) in enumerate(self.valid_dataloader):
+            for idx, (inputs, labels) in enumerate(self.cnn.valid_dataloader):
                 inputs, labels = inputs.cuda(), labels.cuda()
                 output = self.netG(inputs) + inputs
                 if idx == 0:
@@ -346,13 +346,20 @@ class GAN:
         if not os.path.exists('./output/'):
             os.mkdir('./output/')
         plt.imshow(tensor[0, 0, :, 100, :], cmap='gray', vmin=-1, vmax=2.5)
-        plt.savefig('./output/{}.png'.format(epoch))
+        name = '#'.join(self.image_quality(tensor[0, 0, :, 100, :]))
+        plt.savefig('./output/{}#{}.png'.format(epoch, name))
+
+    def image_quality(self, img):
+        img = matlab.double(img.tolist())
+        vals = ['niqe', self.eng.niqe(img), 'piqe', self.eng.piqe(img), 'brisque', self.eng.brisque(img)]
+        vals = map(str, vals)
+        return vals
 
     def get_checkpoint_dir(self):
         return self.checkpoint_dir
 
     def save_checkpoint(self, valid_metric):
-        if valid_metric >= self.valid_optimal_metric:
+        if valid_metric >= self.valid_optimal_metric or True:
             self.optimal_epoch = self.epoch
             self.valid_optimal_metric = valid_metric
             for root, Dir, Files in os.walk(self.checkpoint_dir):
@@ -365,6 +372,7 @@ class GAN:
                             pass
             torch.save(self.netG.state_dict(), '{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
             torch.save(self.netD.state_dict(), '{}D_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
+            torch.save(self.cnn.model.state_dict(), '{}cnn_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
             # print('model saved in', self.checkpoint_dir)
 
     def eval_iqa_all(self, metrics=['brisque']):
