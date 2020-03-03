@@ -16,6 +16,7 @@
     "checkpoint_dir": "./checkpoint_dir/gan_test/",
     "drop_rate": 0.725430,
     "balanced": 0,
-    "save_every_epoch": 1,
-    "log_name": "log_test.txt" 
+    "log_name": "log_test.txt",
+    "save_every_epoch": 2,
+    "D_G_ratio": 3
 }
