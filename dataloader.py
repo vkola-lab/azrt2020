@@ -19,7 +19,7 @@ to do list:
 
 class CNN_Data(Dataset):
     """
-    csv files ./lookuptxt/*.csv contains MRI filenames along with demographic and diagnosis information 
+    csv files ./lookuptxt/*.csv contains MRI filenames along with demographic and diagnosis information
     """
     def __init__(self, Data_dir, exp_idx, stage, seed=1000):
         random.seed(seed)
@@ -118,7 +118,7 @@ class PatchGenerator:
 
 
 class GAN_Data(Dataset):
-    def __init__(self, Data_dir, stage, ratio=(0.6, 0.2, 0.2), seed=1000):
+    def __init__(self, Data_dir, stage, ratio=(1, 0, 0), seed=1000):
         random.seed(seed)
         self.Data_dir = Data_dir
         Data_list0 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_NL.txt')

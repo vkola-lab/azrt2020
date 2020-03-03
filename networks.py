@@ -144,6 +144,7 @@ class GAN:
         self.prepare_dataloader()
         self.log_name = self.config["log_name"]
         self.eng = matlab.engine.start_matlab()
+        self.save_every_epoch = self.config["save_every_epoch"]
 
     def prepare_dataloader(self):
         self.train_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_p'), batch_size=self.config['batch_size_p'], shuffle=True)
@@ -181,7 +182,7 @@ class GAN:
             cond1 = self.epoch<self.config["warm_G_epoch"]
             cond2 = self.config["warm_G_epoch"]<=self.epoch<=self.config["warm_D_epoch"]
             self.train_model_epoch(warmup_G=cond1, warmup_D=cond2)
-            if self.epoch % 10 == 0:
+            if self.epoch % self.save_every_epoch == 0:
                 valid_metric = self.valid_model_epoch()
                 with open(self.log_name, 'a') as f:
                     f.write('validation accuracy {} \n'.format(valid_metric))
@@ -293,6 +294,8 @@ class GAN:
             loss_D_R.backward()
             if not warmup_G:
                 self.optimizer_D.step()
+            if idx % self.config['D_G_ratio'] != 0:
+                continue
             #######################################
             # get gradient for G network
             self.netG.zero_grad()
@@ -318,7 +321,7 @@ class GAN:
             if not warmup_D:
                 self.optimizer_G.step()
 
-            if self.epoch % 10 == 0 or (self.epoch % 10 == 0 and self.epoch > self.config["warm_D_epoch"]):
+            if self.epoch % self.save_every_epoch == 0 or (self.epoch % self.save_every_epoch == 0 and self.epoch > self.config["warm_D_epoch"]):
                 with open(self.log_name, 'a') as f:
                     out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n'
                           % (self.epoch, self.config['epochs'], idx, len(self.train_dataloader), Routput.data.cpu().mean(),
