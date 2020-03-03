@@ -138,6 +138,7 @@ class GAN:
             os.mkdir(self.checkpoint_dir)
         self.prepare_dataloader()
         self.log_name = self.config["log_name"]
+        self.save_every_epoch = self.config["save_every_epoch"]
 
     def prepare_dataloader(self):
         dataset = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_w')
@@ -181,7 +182,7 @@ class GAN:
             cond1 = self.epoch<self.config["warm_G_epoch"]
             cond2 = self.config["warm_G_epoch"]<=self.epoch<=self.config["warm_D_epoch"]
             self.train_model_epoch(warmup_G=cond1, warmup_D=cond2)
-            if self.epoch % 10 == 0:
+            if self.epoch % self.save_every_epoch == 0:
                 valid_metric = self.valid_model_epoch()
                 with open(self.log_name, 'a') as f:
                     f.write('validation accuracy {} \n'.format(valid_metric))
@@ -216,63 +217,6 @@ class GAN:
                         os.mkdir(target)
                     np.save(target+Data_list[j], output.data.cpu().numpy().squeeze())
 
-        # print('Generation completed!')
-
-    @timeit
-    def validate(self, plot=True, zoom=False):
-        eng = matlab.engine.start_matlab()
-        # print('#########Preparing validation results...#########')
-        with torch.no_grad():
-            self.netG.train(False)
-            # do some plots and post analysis
-            iqa_oris = []
-            iqa_gens = []
-            iqa_3s = []
-            out_dir = './outputs/'+str(self.epoch)+'/'
-            if os.path.isdir(out_dir):
-                shutil.rmtree(out_dir)
-            os.mkdir(out_dir)
-            for idx, (inputs_lo, inputs_hi, label) in enumerate(self.valid_dataloader):
-                inputs_lo, inputs_hi = inputs_lo.cuda(), inputs_hi.cuda()
-                Mask = self.netG(inputs_lo)
-                output = inputs_lo + Mask
-
-                inputs_lo = inputs_lo.cpu().squeeze().numpy()
-                output = output.cpu().squeeze().numpy()
-                inputs_hi = inputs_hi.cpu().squeeze().numpy()
-
-                iqa_funcs = {'ssim':SSIM, 'immse':immse, 'psnr':psnr, 'brisque':brisque, 'niqe':niqe, 'piqe':piqe}
-                out_string = ''
-                for metric in iqa_funcs:
-                    if metric == 'ssim':
-                        iqa_gen = iqa_funcs[metric](output, inputs_hi, zoom)
-                        iqa_ori = iqa_funcs[metric](inputs_lo, inputs_hi, zoom)
-                    elif metric == 'immse' or metric == 'psnr':
-                        iqa_gen = iqa_funcs[metric](output, inputs_hi, zoom, eng)
-                        iqa_ori = iqa_funcs[metric](inputs_lo, inputs_hi, zoom, eng)
-                    elif metric == 'brisque' or metric == 'niqe' or metric == 'piqe':
-                        iqa_gen = iqa_funcs[metric](output, zoom, eng)
-                        iqa_ori = iqa_funcs[metric](inputs_lo, zoom, eng)
-                        iqa_3 = iqa_funcs[metric](inputs_hi, zoom, eng)
-                        iqa_3s += [iqa_3]
-                    else:
-                        iqa_gen = None
-                        iqa_ori = None
-                    iqa_oris += [iqa_ori]
-                    iqa_gens += [iqa_gen]
-                    out_string += '#'+metric+'#'+str(iqa_gen)
-                if plot:
-                    GAN_test_plot(out_dir, idx, inputs_lo, output, inputs_hi, out_string)
-                print('ssim', 'immse', 'psnr', 'brisque', 'niqe', 'piqe')
-                # iqa_oris = np.asarray(iqa_oris)
-                # iqa_oris = iqa_oris.reshape(-1, 6)
-                print(iqa_oris)
-                print('brisque', 'niqe', 'piqe')
-                # iqa_3s = np.asarray(iqa_3s)
-                # iqa_3s = iqa_oris.reshape(-1, 3)
-                print(iqa_3s)
-        eng.quit()
-
     def train_model_epoch(self, warmup_G=False, warmup_D=False):
         self.netG.train(True)
         self.netD.train(True)
@@ -304,21 +248,22 @@ class GAN:
             loss_G_dif = torch.mean(torch.abs(Mask))
             # forward output to CNN to get AD loss
             whole_lo, AD_label = whole_lo.cuda(), AD_label.cuda()
-            AD_loss = 0
-            for a in range(whole_lo.shape[0]):
-                whole_l, AD_l = whole_lo[a:a+1], AD_label[a:a+1]
-                pred = self.cnn.model(whole_l + self.netG(whole_l))
-                AD_loss += self.config['AD_factor'] * self.crossentropy(pred, AD_l)
-                # AD_loss.backward()
+            AD_loss = torch.tensor(0)
+            
             if warmup_G:
                 loss_G = self.config["L1_norm_factor"] * loss_G_dif
             else:
+                for a in range(whole_lo.shape[0]):
+                    whole_l, AD_l = whole_lo[a:a+1], AD_label[a:a+1]
+                    pred = self.cnn.model(whole_l + self.netG(whole_l))
+                    AD_loss = self.config['AD_factor'] * self.crossentropy(pred, AD_l)
+                    AD_loss.backward()
                 loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_GAN
             loss_G.backward()
             if not warmup_D:
                 self.optimizer_G.step()
 
-            if self.epoch % 10 == 0 or (self.epoch % 10 == 0 and self.epoch > self.config["warm_D_epoch"]):
+            if self.epoch % self.save_every_epoch == 0:
                 with open(self.log_name, 'a') as f:
                     out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n'
                           % (self.epoch, self.config['epochs'], idx, len(self.train_p_dataloader), Routput.data.cpu().mean(),
@@ -366,49 +311,6 @@ class GAN:
             torch.save(self.netG.state_dict(), '{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
             torch.save(self.netD.state_dict(), '{}D_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch))
             # print('model saved in', self.checkpoint_dir)
-
-    def eval_iqa_all(self, metrics=['brisque']):
-        # print('Evaluating IQA results on all datasets:')
-        eng = matlab.engine.start_matlab()
-
-        data  = []
-        names = ['ADNI', 'NACC', 'AIBL']
-
-        sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/AIBL_NoBack/"]
-        data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(sources[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
-        dataloaders = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
-
-        data = []
-        targets = ["./ADNIP_NoBack/", "./NACCP_NoBack/", "./AIBLP_NoBack/"]
-        data += [Data(targets[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(targets[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(targets[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
-        dataloaders_p = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
-
-        Data_lists = [d.Data_list for d in data]
-
-        out_dir = './iqa/'
-        if os.path.isdir(out_dir):
-            shutil.rmtree(out_dir)
-        os.mkdir(out_dir)
-
-        for m in metrics:
-            for id in range(len(names)):
-                name = names[id]
-                Data_list = Data_lists[id]
-                dataloader = dataloaders[id]
-                dataloader_p = dataloaders_p[id]
-                iqa_oris = []
-                iqa_gens = []
-                for i, (input, _) in enumerate(dataloader):
-                    input = input.squeeze().numpy()
-                    iqa_tensor(input, eng, Data_list[i], m, out_dir)
-                for j, (input_p, _) in enumerate(dataloader_p):
-                    input_p = input_p.squeeze().numpy()
-                    iqa_tensor(input_p, eng, Data_list[j], m, out_dir)
-        eng.quit()
 
 
 if __name__ == "__main__":
