@@ -1,5 +1,5 @@
 from dataloader import Data
-from networks import CNN_Wrapper, FCN_Wrapper, GAN
+from networks import CNN_Wrapper, FCN_Wrapper
 from utils import read_json
 import numpy as np
 from PIL import Image
@@ -112,14 +112,13 @@ def fcn_main(repe_time, model_name, fcn_setting):
                         balanced        = fcn_setting['balanced'],
                         Data_dir        = fcn_setting['Data_dir'],
                         patch_size      = fcn_setting['patch_size'],
+                        lr              = fcn_setting['learning_rate'],
                         exp_idx         = exp_idx,
                         seed            = 1000,
                         model_name      = 'fcn',
                         metric          = 'accuracy')
-        fcn.train(lr     = fcn_setting['learning_rate'],
-                  epochs = fcn_setting['train_epochs'])
-        fcn.test_and_generate_DPMs()
-
+        fcn.train(epochs = fcn_setting['train_epochs'])
+        # fcn.test_and_generate_DPMs()
 
 
 if __name__ == "__main__":
