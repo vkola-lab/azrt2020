@@ -5,7 +5,7 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 from torch.autograd import Variable
-from utils import read_txt, read_csv
+from utils import read_txt, read_csv, padding
 import random
 import copy
 
@@ -24,8 +24,8 @@ class CNN_Data(Dataset):
     def __init__(self, Data_dir, exp_idx, stage, seed=1000):
         random.seed(seed)
         self.Data_dir = Data_dir
-        if stage in ['train', 'valid', 'test']:
-            self.Data_list, self.Label_list = read_csv('./lookupcsv/exp{}/{}.csv'.format(exp_idx, stage))
+        if stage in ['train', 'valid', 'test', 'valid_patch']:
+            self.Data_list, self.Label_list = read_csv('./lookupcsv/exp{}/{}.csv'.format(exp_idx, stage.replace('_patch', '')))
         elif stage in ['ADNI', 'NACC', 'AIBL']:
             self.Data_list, self.Label_list = read_csv('./lookupcsv/{}.csv'.format(stage))
 
@@ -42,6 +42,36 @@ class CNN_Data(Dataset):
         count, count0, count1 = float(len(self.Label_list)), float(self.Label_list.count(0)), float(self.Label_list.count(1))
         weights = [count / count0 if i == 0 else count / count1 for i in self.Label_list]
         return weights, count0 / count1
+
+
+class FCN_Data(CNN_Data):
+    def __init__(self, Data_dir, exp_idx, stage, whole_volume=False, seed=1000, patch_size=47):
+        CNN_Data.__init__(self, Data_dir, exp_idx, stage, seed)
+        self.stage = stage
+        self.whole = whole_volume
+        self.patch_size = patch_size
+        self.patch_sampler = PatchGenerator(patch_size=self.patch_size)
+
+    def __getitem__(self, idx):
+        label = self.Label_list[idx]
+        data = np.load(self.Data_dir + self.Data_list[idx] + '.npy').astype(np.float32)
+        if self.stage == 'train' and not self.whole:
+            patch = self.patch_sampler.random_sample(data)
+            patch = np.expand_dims(patch, axis=0)
+            return patch, label
+        elif self.stage == 'valid_patch':
+            array_list = []
+            patch_locs = [[25, 90, 30], [115, 90, 30], [67, 90, 90], [67, 45, 60], [67, 135, 60]]
+            for i, loc in enumerate(patch_locs):
+                x, y, z = loc
+                patch = data[x:x+47, y:y+47, z:z+47]
+                array_list.append(np.expand_dims(patch, axis = 0))
+            data = Variable(torch.FloatTensor(np.stack(array_list, axis = 0)))
+            label = Variable(torch.LongTensor([label]*5))
+            return data, label
+        else:
+            data = np.expand_dims(padding(data, win_size=self.patch_size // 2), axis=0)
+            return data, label
 
 
 class Data(Dataset):
@@ -97,12 +127,14 @@ class PatchGenerator:
     def __init__(self, patch_size):
         self.patch_size = patch_size
 
-    def random_sample(self, data1, data2):
+    def random_sample(self, data1, data2=None):
         """sample random patch from numpy array data"""
         X, Y, Z = data1.shape
         x = random.randint(0, X-self.patch_size)
         y = random.randint(0, Y-self.patch_size)
         z = random.randint(0, Z-self.patch_size)
+        if data2 is None:
+            return data1[x:x+self.patch_size, y:y+self.patch_size, z:z+self.patch_size]
         return data1[x:x+self.patch_size, y:y+self.patch_size, z:z+self.patch_size], \
                data2[x:x+self.patch_size, y:y+self.patch_size, z:z+self.patch_size]
 
@@ -122,14 +154,14 @@ class GAN_Data(Dataset):
         random.seed(seed)
         self.Data_dir = Data_dir
         Data_list0 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_NL.txt')
-        #Data_list1 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_MCI.txt')
+        Data_list1 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_MCI.txt')
         Data_list2 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_AD.txt')
         Data_list3 = read_txt('./lookuptxt/', 'ADNI_3T_NL.txt')
-        #Data_list4 = read_txt('./lookuptxt/', 'ADNI_3T_MCI.txt')
+        Data_list4 = read_txt('./lookuptxt/', 'ADNI_3T_MCI.txt')
         Data_list5 = read_txt('./lookuptxt/', 'ADNI_3T_AD.txt')
-        self.Data_list_lo = Data_list0 + Data_list2
-        self.Data_list_hi = Data_list3 + Data_list5
-        self.Label_list = [0]*len(Data_list0) + [1]*len(Data_list2)
+        self.Data_list_lo = Data_list0 + Data_list2 + Data_list1
+        self.Data_list_hi = Data_list3 + Data_list5 + Data_list4
+        self.Label_list = [0]*len(Data_list0) + [1]*len(Data_list2) + [2]*len(Data_list1)
         self.stage = stage
         self.length = len(self.Data_list_lo)
         self.patchsampler = PatchGenerator(patch_size = 47)
@@ -163,12 +195,6 @@ class GAN_Data(Dataset):
             return np.expand_dims(data_lo, axis=0), self.Label_list[index]
         else:
             return np.expand_dims(data_lo, axis=0), np.expand_dims(data_hi, axis=0), self.Label_list[index]
-
-    def get_sample_weights(self):
-        train_labels = [self.Label_list[index] for index in self.index_list]
-        count, count0, count1 = float(len(train_labels)), float(train_labels.count(0)), float(train_labels.count(1))
-        weights = [count / count0 if i == 0 else count / count1 for i in train_labels]
-        return weights
 
 
 if __name__ == "__main__":

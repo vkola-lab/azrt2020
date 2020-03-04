@@ -1,5 +1,5 @@
 from dataloader import Data
-from networks import CNN_Wrapper, GAN
+from networks import CNN_Wrapper, FCN_Wrapper, GAN
 from utils import read_json
 import numpy as np
 from PIL import Image
@@ -104,24 +104,27 @@ def cnn_main(repe_time, model_name, cnn_setting):
                   epochs = cnn_setting['train_epochs'])
         cnn.test()
 
+def fcn_main(repe_time, model_name, fcn_setting):
+    for exp_idx in range(repe_time):
+        fcn = FCN_Wrapper(fil_num        = fcn_setting['fil_num'],
+                        drop_rate       = fcn_setting['drop_rate'],
+                        batch_size      = fcn_setting['batch_size'],
+                        balanced        = fcn_setting['balanced'],
+                        Data_dir        = fcn_setting['Data_dir'],
+                        patch_size      = fcn_setting['patch_size'],
+                        exp_idx         = exp_idx,
+                        seed            = 1000,
+                        model_name      = 'fcn',
+                        metric          = 'accuracy')
+        fcn.train(lr     = fcn_setting['learning_rate'],
+                  epochs = fcn_setting['train_epochs'])
+        fcn.test_and_generate_DPMs()
+
+
+
 if __name__ == "__main__":
-
-    gan = gan_main()
-    #
-    # eval_iqa_all(['brisque', 'niqe'])
-    # print('########IQA Done.########')
-
-    # cnn_config = read_json('./cnn_config.json')
+    cnn_config = read_json('./cnn_config.json')
     # cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
+    fcn_main(1, 'fcn', cnn_config['fcn'])
 
-
-    # cnn_main(1, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
-    # print('########CNN Done.########')
-
-    # cnn_config = read_json('./cnn_config.json')
-    # cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
-    # print('########CNN Done.########')
-    # cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
-    # print('########CNMP Done.########')
-    # roc_plot_perfrom_table()
-    # print('########Finished.########')
+    

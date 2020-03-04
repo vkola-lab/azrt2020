@@ -325,13 +325,8 @@ def softmax(x1, x2):
     return np.exp(x2) / (np.exp(x1) + np.exp(x2))
 
 def get_AD_risk(raw):
-    raw = raw[0, :, :, :, :].cpu()
-    a, x, y, z = raw.shape
-    risk = np.zeros((x, y, z))
-    for i in range(x):
-        for j in range(y):
-            for k in range(z):
-                risk[i, j, k] = softmax(raw[0, i, j, k], raw[1, i, j, k])
+    x1, x2 = raw[0, :, :, :], raw[1, :, :, :]
+    risk = np.exp(x2) / (np.exp(x1) + np.exp(x2))
     return risk
 
 def get_ROI(train_MCC, roi_threshold):
@@ -369,13 +364,30 @@ def read_txt(path, txt_file):
             content.append(line.strip('\n'))
     return content
 
-def test(**super_kwargs):
-    print(super_kwargs['whole'])
-    del super_kwargs['whole']
-    test_2(**super_kwargs)
+def DPM_statistics(DPMs, Labels):
+    shape = DPMs[0].shape[1:]
+    voxel_number = shape[0] * shape[1] * shape[2]
+    TP, FP, TN, FN = np.zeros(shape), np.zeros(shape), np.zeros(shape), np.zeros(shape)
+    for label, DPM in zip(Labels, DPMs):
+        risk_map = get_AD_risk(DPM)
+        if label == 0:
+            TN += (risk_map < 0.5).astype(np.int)
+            FP += (risk_map >= 0.5).astype(np.int)
+        elif label == 1:
+            TP += (risk_map >= 0.5).astype(np.int)
+            FN += (risk_map < 0.5).astype(np.int)
+    tn = float("{0:.2f}".format(np.sum(TN) / voxel_number))
+    fn = float("{0:.2f}".format(np.sum(FN) / voxel_number))
+    tp = float("{0:.2f}".format(np.sum(TP) / voxel_number))
+    fp = float("{0:.2f}".format(np.sum(FP) / voxel_number))
+    matrix = [[tn, fn], [fp, tp]]
+    count = len(Labels)
+    TP, TN, FP, FN = TP.astype(np.float)/count, TN.astype(np.float)/count, FP.astype(np.float)/count, FN.astype(np.float)/count
+    ACCU = TP + TN
+    F1 = 2*TP/(2*TP+FP+FN)
+    MCC = (TP*TN-FP*FN)/(np.sqrt((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))+0.00000001*np.ones(shape))
+    return matrix, ACCU, F1, MCC
 
-def test_2(item, ittt, df=1):
-    print(item, ittt, df)
 
 # if __name__ == "__main__":
 #     test(item=3, ittt='a', whole=3)
