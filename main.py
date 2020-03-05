@@ -21,7 +21,7 @@ def gan_main():
     # ...
     gan = GAN('./gan_config_optimal.json', 0)
     gan.train()
-    gan.generate()
+    # gan.generate()
     # gan.epoch=1040
     # gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, gan.epoch)))
     return gan

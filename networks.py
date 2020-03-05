@@ -15,6 +15,7 @@ from tqdm import tqdm
 from visual import GAN_test_plot
 from statistics import mean
 from sklearn.metrics import accuracy_score
+import random
 
 """
 1. augmentation, small rotation,
@@ -125,15 +126,16 @@ class CNN_Wrapper:
 class GAN:
     # 1. Larger input for classifier
     #       Already done (√)
-    # 2. Larger validation set
-    #       Comes from the CNN's validation set+train set(?), instead of the 82 cases (√)
+    # 2. Larger validation/test set
+    #       Comes from the CNN's validation set+train set, instead of the 82 cases (√)
     # 3. Train CNN in process & use Trained CNN (CNN*) directly (√?)
     def __init__(self, config, seed):
         self.seed = seed
         self.config = read_json(config)
         self.netG = _netG(self.config["G_fil_num"]).cuda()
         self.netD = _netD(self.config["D_fil_num"]).cuda()
-        self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=0, epoch=100)
+        # self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=0, epoch=100)
+        self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=0)
         if self.config["D_pth"]:
             self.netD.load_state_dict(torch.load(self.config["D_pth"]))
         if self.config["G_pth"]:
@@ -149,7 +151,7 @@ class GAN:
     def prepare_dataloader(self):
         self.train_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_p'), batch_size=self.config['batch_size_p'], shuffle=True)
 
-    def initial_CNN(self, json_file, exp_idx, epoch):
+    def initial_CNN(self, json_file, exp_idx, epoch=None):
         cnn_setting = read_json(json_file)['cnn']
         cnn = CNN_Wrapper(fil_num       = cnn_setting['fil_num'],
                         drop_rate       = cnn_setting['drop_rate'],
@@ -161,7 +163,8 @@ class GAN:
                         model_name      = 'cnn_gan',
                         metric          = 'accuracy')
         cnn.model.train(True)
-        cnn.model.load_state_dict(torch.load('./checkpoint_dir/cnn_exp{}/cnn_{}.pth'.format(exp_idx, epoch)))
+        if epoch:
+            cnn.model.load_state_dict(torch.load('./checkpoint_dir/cnn_exp{}/cnn_{}.pth'.format(exp_idx, epoch)))
         return cnn
 
     def train(self):
@@ -221,8 +224,12 @@ class GAN:
         self.netG.train(True)
         self.cnn.model.train(True)
         self.netD.train(True)
+        # if not warmup_G and not warmup_D:
+        #     print('##########warmup complete!##########')
+        train_matrix = [[0, 0.00001], [0, 0]]
         for idx, ((patch_lo, patch_hi), (whole_lo, AD_label)) in enumerate(zip(self.train_dataloader, self.cnn.train_dataloader)):
             # get gradient for D network with fake data
+            self.cnn.model.zero_grad()
             self.netD.zero_grad()
             patch_lo, patch_hi = patch_lo.cuda(), patch_hi.cuda()
             Mask = self.netG(patch_lo)
@@ -239,6 +246,19 @@ class GAN:
             loss_D_R.backward()
             if not warmup_G:
                 self.optimizer_D.step()
+
+            # forward output to CNN to get AD loss
+            AD_loss = torch.tensor(0)
+            whole_lo, AD_label = whole_lo.cuda(), AD_label.cuda()
+            for a in range(whole_lo.shape[0]):
+                whole_l, AD_l = whole_lo[a:a+1], AD_label[a:a+1]
+                pred = self.cnn.model(whole_l + self.netG(whole_l))
+                train_matrix = matrix_sum(train_matrix, get_confusion_matrix(pred, AD_label))
+                AD_loss = self.config['AD_factor'] * self.crossentropy(pred, AD_l)
+                AD_loss.backward()
+            self.cnn.optimizer.step()
+
+            # if it is the epoch for training the descriminator
             if idx % self.config['D_G_ratio'] != 0:
                 continue
             #######################################
@@ -249,22 +269,14 @@ class GAN:
             loss_G_GAN = self.criterion(Goutput, Glabel)
             # get gradient for G network with L1 norm between real and fake
             loss_G_dif = torch.mean(torch.abs(Mask))
-            AD_loss = torch.tensor(0)
             if warmup_G:
                 loss_G = self.config["L1_norm_factor"] * loss_G_dif
             else:
-                # forward output to CNN to get AD loss
-                whole_lo, AD_label = whole_lo.cuda(), AD_label.cuda()
-                for a in range(whole_lo.shape[0]):
-                    whole_l, AD_l = whole_lo[a:a+1], AD_label[a:a+1]
-                    pred = self.cnn.model(whole_l + self.netG(whole_l))
-                    AD_loss = self.config['AD_factor'] * self.crossentropy(pred, AD_l)
-                    AD_loss.backward()
-                self.cnn.optimizer.step()
                 loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_GAN
             loss_G.backward()
             if not warmup_D:
                 self.optimizer_G.step()
+
 
             if self.epoch % self.save_every_epoch == 0 or (self.epoch % self.save_every_epoch == 0 and self.epoch > self.config["warm_D_epoch"]):
                 with open(self.log_name, 'a') as f:
@@ -275,6 +287,22 @@ class GAN:
                 print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f'
                       % (self.epoch, self.config['epochs'], idx, len(self.train_dataloader), Routput.data.cpu().mean(),
                          Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
+
+        val = random.random()
+        if val > self.epoch/self.config['epochs']:
+            for whole_lo, AD_label in self.cnn.train_dataloader:
+                whole_lo, AD_label = whole_lo.cuda(), AD_label.cuda()
+                pred = self.cnn.model(whole_lo)
+                train_matrix = matrix_sum(train_matrix, get_confusion_matrix(pred, AD_label))
+                AD_loss = self.config['AD_factor'] * self.crossentropy(pred, AD_label)
+                AD_loss.backward()
+
+                self.cnn.optimizer.step()
+
+        if self.epoch % self.save_every_epoch == 0:
+            with open(self.log_name, 'a') as f:
+                f.write('train accuracy {} \n'.format(get_accu(train_matrix)))
+            print('train accuracy ', get_accu(train_matrix), train_matrix)
 
     def valid_model_epoch(self):
         with torch.no_grad():
@@ -291,11 +319,12 @@ class GAN:
 
     def gen_output_image(self, tensor, epoch):
         tensor = tensor.data.cpu().numpy()
-        if not os.path.exists('./output/'):
-            os.mkdir('./output/')
+        out_dir = './output_mix/'
+        if not os.path.exists(out_dir):
+            os.mkdir(out_dir)
         plt.imshow(tensor[0, 0, :, 100, :], cmap='gray', vmin=-1, vmax=2.5)
         name = '#'.join(self.image_quality(tensor[0, 0, :, 100, :]))
-        plt.savefig('./output/{}#{}.png'.format(epoch, name))
+        plt.savefig(out_dir+'{}#{}.png'.format(epoch, name))
 
     def image_quality(self, img):
         img = matlab.double(img.tolist())
