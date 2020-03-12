@@ -60,13 +60,15 @@ def timeit(method):
     return timed
 
 def iqa_tensor(tensor, eng, filename, metric, target):
-    if not os.path.isdir(target):
-        os.mkdir(target)
+    # if not os.path.isdir(target):
+    #     os.mkdir(target)
     out = []
     if metric == 'brisque':
         func = eng.brisque
     elif metric == 'niqe':
         func = eng.niqe
+    elif metric == 'piqe':
+        func = eng.piqe
 
     for side in range(len(tensor.shape)):
         start = 30

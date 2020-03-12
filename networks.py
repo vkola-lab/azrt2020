@@ -1,6 +1,7 @@
 import os
 from os import path
 import sys
+import collections
 import torch
 import torch.nn as nn
 import torch.optim as optim
@@ -52,9 +53,10 @@ class CNN_Wrapper:
             print('Best model saved at the {}th epoch:'.format(self.optimal_epoch), self.optimal_valid_metric, self.optimal_valid_matrix)
         return self.optimal_valid_metric
 
-    def test(self):
+    def test(self, gan=False):
         print('testing ... ')
-        self.model.load_state_dict(torch.load('{}{}_{}.pth'.format(self.checkpoint_dir, self.model_name, self.optimal_epoch)))
+        if not gan:
+            self.model.load_state_dict(torch.load('{}{}_{}.pth'.format(self.checkpoint_dir, self.model_name, self.optimal_epoch)))
         self.model.train(False)
         with torch.no_grad():
             for stage in ['train', 'valid', 'test', 'AIBL', 'NACC']:
@@ -124,18 +126,15 @@ class CNN_Wrapper:
 
 
 class GAN:
-    # 1. Larger input for classifier
-    #       Already done (√)
-    # 2. Larger validation/test set
-    #       Comes from the CNN's validation set+train set, instead of the 82 cases (√)
-    # 3. Train CNN in process & use Trained CNN (CNN*) directly (√?)
-    def __init__(self, config, seed):
+    def __init__(self, config, exp_idx, seed=1000):
         self.seed = seed
+        self.exp_idx = exp_idx
+        self.iqa_hash = collections.defaultdict(dict)
         self.config = read_json(config)
         self.netG = _netG(self.config["G_fil_num"]).cuda()
         self.netD = _netD(self.config["D_fil_num"]).cuda()
         # self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=0, epoch=100)
-        self.cnn = self.initial_CNN('./cnn_config.json', exp_idx=0)
+        self.initial_CNN('./cnn_config.json', exp_idx=0)
         if self.config["D_pth"]:
             self.netD.load_state_dict(torch.load(self.config["D_pth"]))
         if self.config["G_pth"]:
@@ -145,11 +144,23 @@ class GAN:
             os.mkdir(self.checkpoint_dir)
         self.prepare_dataloader()
         self.log_name = self.config["log_name"]
+        self.iqa_name = self.config["iqa_name"]
         self.eng = matlab.engine.start_matlab()
         self.save_every_epoch = self.config["save_every_epoch"]
+        # self.eval_iqa_orig()
 
     def prepare_dataloader(self):
         self.train_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_p'), batch_size=self.config['batch_size_p'], shuffle=True)
+
+        self.ADNI_valid_dataloader = CNN_Data(self.config['Data_dir'], self.exp_idx, stage='valid', seed=self.seed) # image evaluation
+        self.ADNI_test_dataloader  = CNN_Data(self.config['Data_dir'], self.exp_idx, stage='test', seed=self.seed)  # image evaluation
+        self.AIBL_dataloader       = CNN_Data('/data/datasets/AIBL_NoBack/', self.exp_idx, stage='AIBL', seed=self.seed)  # image evaluation
+        self.NACC_dataloader       = CNN_Data('/data/datasets/NACC_NoBack/', self.exp_idx, stage='NACC', seed=self.seed)  # image evaluation
+
+        self.ADNI_valid_geneloader = CNN_Data('./ADNIP_NoBack/', self.exp_idx, stage='valid', seed=self.seed) # image evaluation
+        self.ADNI_test_geneloader  = CNN_Data('./ADNIP_NoBack/', self.exp_idx, stage='test', seed=self.seed)  # image evaluation
+        self.AIBL_geneloader       = CNN_Data('./AIBLP_NoBack/', self.exp_idx, stage='AIBL', seed=self.seed)  # image evaluation
+        self.NACC_geneloader       = CNN_Data('./NACCP_NoBack/', self.exp_idx, stage='NACC', seed=self.seed)  # image evaluation
 
     def initial_CNN(self, json_file, exp_idx, epoch=None):
         cnn_setting = read_json(json_file)['cnn']
@@ -164,8 +175,91 @@ class GAN:
                         metric          = 'accuracy')
         cnn.model.train(True)
         if epoch:
-            cnn.model.load_state_dict(torch.load('./checkpoint_dir/cnn_exp{}/cnn_{}.pth'.format(exp_idx, epoch)))
+            # cnn.model.load_state_dict(torch.load('./checkpoint_dir/cnn_exp{}/cnn_{}.pth'.format(exp_idx, epoch)))
+            cnn.model.load_state_dict(torch.load('{}cnn_{}.pth'.format(self.checkpoint_dir, epoch)))
+        self.cnn = cnn
         return cnn
+
+    def eval_iqa_orig(self, metrics=['brisque', 'niqe', 'piqe']):
+        self.iqa_log = open(self.iqa_name, 'w')
+        self.iqa_log.close()
+        for m in metrics:
+            for dataset, name in zip([self.ADNI_valid_dataloader, self.ADNI_test_dataloader, self.NACC_dataloader, self.AIBL_dataloader], ['valid', 'test', 'NACC', 'AIBL']):
+                iqa_oris = []
+                for input, _ in dataset:
+                    input = input.squeeze()
+                    iqa_oris += [iqa_tensor(input, self.eng, '', m, '')]
+                iqa_oris = np.asarray(iqa_oris)
+                self.iqa_hash[m][name] = iqa_oris
+
+    def eval_valid(self, metrics=['brisque', 'niqe', 'piqe']):
+        iqa = [] # contains vals in metrics, i.e. 1~3 vals
+        for m in metrics:
+            dataset = self.ADNI_valid_dataloader
+            iqas = []
+            for input, _ in dataset:
+                iqas += [iqa_tensor(input.squeeze(), self.eng, '', m, '')]
+            iqas = np.asarray(iqas)
+            iqa += [np.mean(iqas)]
+
+        return iqa
+
+    def eval(self, metrics=['brisque', 'niqe', 'piqe']):
+        dataset = self.cnn.valid_dataloader
+        with torch.no_grad():
+            self.cnn.model.train(False)
+            self.netG.train(False)
+            preds = []
+            labels = []
+            for input, label in dataset:
+                input = input.cuda()
+                preds += np.argmax(self.cnn.model(input + self.netG(input)).data.cpu().numpy(), axis=1).tolist()
+                labels += label.data.cpu().numpy().tolist()
+            acc = accuracy_score(labels, preds)
+
+            iqa = [] # contains vals in metrics, i.e. 1~3 vals
+            for m in metrics:
+                dataset = self.ADNI_valid_dataloader
+                dataset = DataLoader(dataset, batch_size=1, shuffle=False)
+                # dataset = self.cnn.valid_dataloader
+                iqas = []
+                for i, _ in dataset:
+                    # for i in input:
+                    #     print(i.shape)
+                    #     print(input.shape)
+                        output = i.cuda() + self.netG(i.cuda())
+                        iqas += [iqa_tensor(output.data.cpu().numpy().squeeze(), self.eng, '', m, '')]
+                iqas = np.asarray(iqas)
+                iqa += [np.mean(iqas)]
+
+        return iqa, acc
+
+    def eval_iqa_gene(self, metrics=['brisque', 'niqe', 'piqe'], names=['test', 'NACC', 'AIBL']):
+        iqa_table = collections.defaultdict(dict)
+        table = {'valid': self.ADNI_valid_geneloader, 'test': self.ADNI_test_geneloader, 'NACC': self.NACC_geneloader, 'AIBL': self.AIBL_geneloader}
+        for m in metrics:
+            for name in names:
+                dataset = table[name]
+                iqa_gene = []
+                for input, _ in dataset:
+                    input = input.squeeze()
+                    iqa_gene += [iqa_tensor(input, self.eng, '', m, '')]
+                iqa_gene = np.asarray(iqa_gene)
+                p_va = p_val(self.iqa_hash[m][name], iqa_gene)
+                iqa_table[name][m] = ['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash[m][name]), np.std(self.iqa_hash[m][name])),
+                                      '{0:.4f}+/-{1:.4f}'.format(np.mean(iqa_gene), np.std(iqa_gene)), str(p_va)]
+        with open(self.iqa_name, 'a') as f:
+            for m in metrics:
+                f.write(m + ' image quality comparsion' + '\n')
+                sub_table = [[ds] + iqa_table[ds][m] for ds in names]
+                line = tabulate(sub_table, headers=['1.5T', '1.5T*', 'p-val'])
+                f.write(line + '\n')
+
+    def pick_time(self):
+        for epoch in range(0, self.config['epochs'], self.save_every_epoch):
+            self.generate(dataset_name=['ADNI'], epoch=epoch)
+            self.eval_iqa_gene(metrics=['brisque', 'niqe', 'piqe'], names=['valid'])
+            roc_plot_perfrom_table(self.iqa_name)
 
     def train(self):
         self.log = open(self.log_name, 'w')
@@ -193,19 +287,23 @@ class GAN:
                 self.save_checkpoint(valid_metric)
         return self.valid_optimal_metric
 
-    def generate(self):
-        # generate & save 1.5T* images using MRIGAN
+
+    def generate(self, dataset_name=['ADNI', 'NACC', 'AIBL'], epoch=None):
+        if epoch:
+            self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, epoch)))
+        else:
+            self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch)))
         sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/AIBL_NoBack/"]
         targets = ["./ADNIP_NoBack/", "./NACCP_NoBack/", "./AIBLP_NoBack/"]
-
         data = []
-        data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
-        data += [Data(sources[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
+        if 'ADNI' in dataset_name:
+            data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='all', shuffle=False)]
+        if 'NACC' in dataset_name:
+            data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
+        if 'AIBL' in dataset_name:
+            data += [Data(sources[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
         dataloaders = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
         Data_lists = [d.Data_list for d in data]
-        # print('Generating 1.5T+ images for datasets: ADNI, NACC, FHS, AIBL')
-
         with torch.no_grad():
             self.netG.train(False)
             for i in range(len(dataloaders)):
@@ -213,9 +311,7 @@ class GAN:
                 target = targets[i]
                 Data_list = Data_lists[i]
                 for j, (input, label) in enumerate(dataloader):
-                    input = input.cuda()
-                    mask = self.netG(input)
-                    output = input + mask
+                    output = input.cuda() + self.netG(input.cuda())
                     if not os.path.isdir(target):
                         os.mkdir(target)
                     np.save(target+Data_list[j], output.data.cpu().numpy().squeeze())
@@ -303,6 +399,23 @@ class GAN:
             with open(self.log_name, 'a') as f:
                 f.write('train accuracy {} \n'.format(get_accu(train_matrix)))
             print('train accuracy ', get_accu(train_matrix), train_matrix)
+
+    def statistics(self, epoch):
+        # calculate the original image quality
+        # calculate the accuracy and image quality on each corresponding epoch
+        with torch.no_grad():
+            self.cnn.model.load_state_dict(torch.load('./checkpoint_dir/cnn_exp{}/cnn_{}.pth'.format(exp_idx, epoch)))
+            self.cnn.model.train(False)
+            valid_matrix = [[0, 0], [0, 0]]
+            for idx, (inputs, labels) in enumerate(self.cnn.valid_dataloader):
+                inputs, labels = inputs.cuda(), labels.cuda()
+                output = self.netG(inputs) + inputs
+                self.gen_output_image(output, self.epoch)
+                preds = self.cnn.model(output)
+                valid_matrix = matrix_sum(valid_matrix, get_confusion_matrix(preds, labels))
+
+        return get_accu(valid_matrix)
+
 
     def valid_model_epoch(self):
         with torch.no_grad():

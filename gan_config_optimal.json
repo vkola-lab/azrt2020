@@ -16,6 +16,7 @@
     "checkpoint_dir": "./checkpoint_dir/gan_test_mix/",
     "balanced": 0,
     "log_name": "log_test_mix.txt",
+    "iqa_name": "iqa.txt",
     "save_every_epoch": 10,
     "D_G_ratio": 3
 }

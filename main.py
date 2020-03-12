@@ -8,6 +8,7 @@ import torch
 import sys
 sys.path.insert(1, './plot/')
 from plot import roc_plot_perfrom_table
+from train_curve_plot import *
 import matlab.engine
 import os
 import shutil
@@ -20,12 +21,26 @@ def gan_main():
     # after training, generate 1.5T* for CNN /data/datasets/ADNIP_NoBack/
     # ...
     gan = GAN('./gan_config_optimal.json', 0)
-    gan.train()
-    # gan.generate()
-    # gan.epoch=1040
+    # gan.train()
+    # gan.epoch=450
     # gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, gan.epoch)))
+    # gan.generate()
     return gan
 
+def eval_iqa_validation(metrics=['piqe']):
+    eng = matlab.engine.start_matlab()
+    data = Data("./ADNIP_NoBack/", class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='valid', shuffle=False)
+    dataloader = DataLoader(data, batch_size=1, shuffle=False)
+    Data_list = data.Data_list
+    for m in metrics:
+        iqa_gens = []
+        for j, (input_p, _) in enumerate(dataloader):
+            input_p = input_p.squeeze().numpy()
+            iqa_gens += [iqa_tensor(input_p, eng, Data_list[j], m, './iqa/')]
+        print('Average '+m+' on '+'ADNI validation '+' is:')
+        iqa_gens = np.asarray(iqa_gens)
+        print('1.5* : ' + str(np.mean(iqa_gens)) + ' ' + str(np.std(iqa_gens)))
+    eng.quit()
 
 def eval_iqa_all(metrics=['brisque']):
     # print('Evaluating IQA results on all datasets:')
@@ -104,10 +119,45 @@ def cnn_main(repe_time, model_name, cnn_setting):
                   epochs = cnn_setting['train_epochs'])
         cnn.test()
 
+def eval_CNN(json_file, exp_idx, checkpoint_dir, epoch):
+    cnn_setting = read_json(json_file)['cnnp']
+    cnn = CNN_Wrapper(fil_num       = cnn_setting['fil_num'],
+                    drop_rate       = cnn_setting['drop_rate'],
+                    batch_size      = cnn_setting['batch_size'],
+                    balanced        = cnn_setting['balanced'],
+                    Data_dir        = cnn_setting['Data_dir'],
+                    exp_idx         = exp_idx,
+                    seed            = 1000,
+                    model_name      = 'cnn_gan',
+                    metric          = 'accuracy')
+    cnn.model.train(False)
+    if epoch:
+        cnn.model.load_state_dict(torch.load('{}cnn_{}.pth'.format(checkpoint_dir, epoch)))
+    cnn.test(gan=True)
+    return cnn
+
+def post_evaluate():
+    gan = GAN('./gan_config_optimal.json', 0)
+    iqas = []
+    accs = []
+    for epoch in range(0, 10, 10):
+        print(epoch, 'evaluating')
+        gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, epoch)))
+        gan.initial_CNN('./cnn_config.json', exp_idx=0, epoch=epoch)
+        # gan.generate(dataset_name=['ADNI'], epoch=epoch)
+        iqa, acc = gan.eval()
+        iqas += [iqa]
+        accs += [acc]
+    iqa_valid = gan.eval_valid()
+    plot_learning_curve(iqas, accs, iqa_valid)
+
 if __name__ == "__main__":
 
-    gan = gan_main()
-    #
+    # gan = gan_main()
+    post_evaluate();
+
+    # eval_CNN('./cnn_config.json', 0, gan.checkpoint_dir, gan.epoch)
+    # #
     # eval_iqa_all(['brisque', 'niqe'])
     # print('########IQA Done.########')
 
@@ -122,6 +172,6 @@ if __name__ == "__main__":
     # cnn_main(5, 'cnn', cnn_config['cnn'])  # train, valid and test CNN model
     # print('########CNN Done.########')
     # cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
-    # print('########CNMP Done.########')
+    # print('########CNNP Done.########')
     # roc_plot_perfrom_table()
     # print('########Finished.########')
