@@ -35,5 +35,17 @@
         "Data_dir":             "/data/datasets/ADNI_NoBack/",
         "learning_rate":        0.0001,
         "train_epochs":         2000
+    },
+    "mlp": {
+        "imbalan_ratio":        1.0,
+        "fil_num":              100,
+        "drop_rate":            0.5,
+        "batch_size":           8,
+        "balanced":             0,
+        "roi_threshold":        0.6,
+        "roi_count":            200,
+        "choice":               "count",
+        "learning_rate":        0.01,
+        "train_epochs":         300
     }
 }

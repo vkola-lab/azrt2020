@@ -1,5 +1,5 @@
 from dataloader import Data
-from networks import CNN_Wrapper, FCN_Wrapper
+from networks import CNN_Wrapper, FCN_Wrapper, FCN_GAN, MLP_Wrapper
 from utils import read_json
 import numpy as np
 from PIL import Image
@@ -8,6 +8,8 @@ import torch
 import sys
 sys.path.insert(1, './plot/')
 from plot import roc_plot_perfrom_table
+from train_curve_plot import train_plot
+from heatmap import plot_heatmap
 import matlab.engine
 import os
 import shutil
@@ -16,18 +18,15 @@ from dataloader import Data, GAN_Data, CNN_Data
 import numpy as np
 
 def gan_main():
-    # gan training, record niqe, image, SSIM, brisque, ... over time on validation set
-    # after training, generate 1.5T* for CNN /data/datasets/ADNIP_NoBack/
-    # ...
-    gan = GAN('./gan_config_optimal.json', 0)
+    gan = FCN_GAN('./gan_config_optimal.json', 0)
     gan.train()
     gan.generate()
-    # gan.epoch=1040
-    # gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, gan.epoch)))
+    gan.load_trained_FCN('./cnn_config.json', exp_idx=0)
+    gan.fcn.test_and_generate_DPMs()
+    plot_heatmap('/home/sq/gan2020/DPMs/fcn_gan_exp', 'fcngan_heatmap', exp_idx=0, figsize=(9, 4))
     return gan
 
-
-def eval_iqa_all(metrics=['brisque']):
+def eval_iqa_all(metrics=['brisque', 'niqe', 'piqe']):
     # print('Evaluating IQA results on all datasets:')
     eng = matlab.engine.start_matlab()
 
@@ -88,6 +87,20 @@ def eval_iqa_all(metrics=['brisque']):
         f.write(out_str)
     eng.quit()
 
+def eval_iqa_validation(metrics=['piqe']):
+    eng = matlab.engine.start_matlab()
+    data = Data("./ADNIP_NoBack/", class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='valid', shuffle=False)
+    dataloader = DataLoader(data, batch_size=1, shuffle=False)
+    Data_list = data.Data_list
+    for m in metrics:
+        iqa_gens = []
+        for j, (input_p, _) in enumerate(dataloader):
+            input_p = input_p.squeeze().numpy()
+            iqa_gens += [iqa_tensor(input_p, eng, Data_list[j], m, './iqa/')]
+        print('Average '+m+' on '+'ADNI validation '+' is:')
+        iqa_gens = np.asarray(iqa_gens)
+        print('1.5* : ' + str(np.mean(iqa_gens)) + ' ' + str(np.std(iqa_gens)))
+    eng.quit()
 
 def cnn_main(repe_time, model_name, cnn_setting):
     for exp_idx in range(repe_time):
@@ -106,6 +119,7 @@ def cnn_main(repe_time, model_name, cnn_setting):
 
 def fcn_main(repe_time, model_name, fcn_setting):
     for exp_idx in range(repe_time):
+        if exp_idx == 0: continue
         fcn = FCN_Wrapper(fil_num        = fcn_setting['fil_num'],
                         drop_rate       = fcn_setting['drop_rate'],
                         batch_size      = fcn_setting['batch_size'],
@@ -117,13 +131,52 @@ def fcn_main(repe_time, model_name, fcn_setting):
                         seed            = 1000,
                         model_name      = 'fcn',
                         metric          = 'accuracy')
-        fcn.train(epochs = fcn_setting['train_epochs'])
+        # fcn.train(epochs = fcn_setting['train_epochs'])
+        # fcn.optimal_epoch = 1700
         # fcn.test_and_generate_DPMs()
+        plot_heatmap('/home/sq/gan2020/DPMs/fcn_exp', 'fcn_heatmap', exp_idx=exp_idx, figsize=(9, 4))
+
+def mlp_main(exp_time, repe_time, model_name, mode, mlp_setting):
+    for exp_idx in range(exp_time):
+        for repe_idx in range(repe_time):
+            mlp = MLP_Wrapper(imbalan_ratio     = mlp_setting['imbalan_ratio'],
+                                fil_num         = mlp_setting['fil_num'],
+                                drop_rate       = mlp_setting['drop_rate'],
+                                batch_size      = mlp_setting['batch_size'],
+                                balanced        = mlp_setting['balanced'],
+                                roi_threshold   = mlp_setting['roi_threshold'],
+                                exp_idx         = exp_idx,
+                                seed            = repe_idx*exp_idx,
+                                mode            = mode,
+                                model_name      = model_name,
+                                metric          = 'accuracy')
+            mlp.train(lr     = mlp_setting['learning_rate'],
+                    epochs = mlp_setting['train_epochs'])
+            mlp.test(repe_idx)
+
+def post_evaluate():
+    cnn_config = read_json('./cnn_config.json')
+    gan = FCN_GAN('./gan_config_optimal.json', 0)
+    for epoch in range(90, 1200, 60):
+        print('-'*20)
+        gan.load_trained_FCN('./cnn_config.json', exp_idx=0, epoch=epoch)
+        gan.generate(epoch=epoch)  # 45 s
+        gan.fcn.test_and_generate_DPMs() # 150 s
+        mlp_main(1, 5, 'mlp_fcn_gan', 'gan_', cnn_config['mlp']) # 180 s
+        roc_plot_perfrom_table()  
+        eval_iqa_validation() # quick
 
 
 if __name__ == "__main__":
-    cnn_config = read_json('./cnn_config.json')
-    # cnn_main(5, 'cnnp', cnn_config['cnnp']) # train, valid and test CNNP model
-    fcn_main(1, 'fcn', cnn_config['fcn'])
+    # post_evaluate()
+
+    # cnn_config = read_json('./cnn_config.json')
+    # gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
+    # mlp_main(1, 5, 'mlp_fcn_gan', 'gan_', cnn_config['mlp']) # train 5 mlp models with random seeds on generated DPMs from FCN-GAN
+    roc_plot_perfrom_table()  # plot roc and pr curve; print mlp performance table
+    # eval_iqa_all()  # evaluate image quality (niqe, piqe, brisque) on 1.5T and 1.5T* 
+    # train_plot()    # plot image quality, accuracy change as function of time; scatter plots between variables
 
     
+    # fcn_main(5, 'fcn', cnn_config['fcn'])
+    # mlp_main(1, 5, 'mlp_fcn', '', cnn_config['mlp'])

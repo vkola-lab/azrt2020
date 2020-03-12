@@ -184,6 +184,29 @@ class _FCN(nn.Module):
         return fcn
 
 
+class _MLP(nn.Module):
+    "MLP that only use DPMs from fcn"
+    def __init__(self, in_size, drop_rate, fil_num):
+        super(_MLP, self).__init__()
+        self.bn1 = nn.BatchNorm1d(in_size)   
+        self.bn2 = nn.BatchNorm1d(fil_num)  
+        self.fc1 = nn.Linear(in_size, fil_num)
+        self.fc2 = nn.Linear(fil_num, 2)
+        self.do1 = nn.Dropout(drop_rate)
+        self.do2 = nn.Dropout(drop_rate) 
+        self.ac1 = nn.LeakyReLU()
+    
+    def forward(self, X):
+        X = self.bn1(X)
+        out = self.do1(X)
+        out = self.fc1(out)
+        out = self.bn2(out)
+        out = self.ac1(out)
+        out = self.do2(out)
+        out = self.fc2(out)
+        return out
+
+
 if __name__ == "__main__":
     model = Vanila_CNN_Lite(10, 0.5).cuda()
     input = torch.Tensor(10, 1, 181, 217, 181).cuda()

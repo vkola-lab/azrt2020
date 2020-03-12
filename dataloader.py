@@ -5,7 +5,7 @@ import numpy as np
 from torch.utils.data import Dataset, DataLoader
 from torchvision import transforms, utils
 from torch.autograd import Variable
-from utils import read_txt, read_csv, padding
+from utils import read_txt, read_csv, padding, read_csv_complete, get_AD_risk
 import random
 import copy
 
@@ -16,63 +16,6 @@ to do list:
     3. for those 82 cases, 1.5T has inconsistency between data/datasets/ADNI and /data/MRI_GAN/
     4. in filename.txt maybe put complete path of data, no need to assign data_dir
 """
-
-class CNN_Data(Dataset):
-    """
-    csv files ./lookuptxt/*.csv contains MRI filenames along with demographic and diagnosis information
-    """
-    def __init__(self, Data_dir, exp_idx, stage, seed=1000):
-        random.seed(seed)
-        self.Data_dir = Data_dir
-        if stage in ['train', 'valid', 'test', 'valid_patch']:
-            self.Data_list, self.Label_list = read_csv('./lookupcsv/exp{}/{}.csv'.format(exp_idx, stage.replace('_patch', '')))
-        elif stage in ['ADNI', 'NACC', 'AIBL']:
-            self.Data_list, self.Label_list = read_csv('./lookupcsv/{}.csv'.format(stage))
-
-    def __len__(self):
-        return len(self.Data_list)
-
-    def __getitem__(self, idx):
-        label = self.Label_list[idx]
-        data = np.load(self.Data_dir + self.Data_list[idx] + '.npy').astype(np.float32)
-        data = np.expand_dims(data, axis=0)
-        return data, label
-
-    def get_sample_weights(self):
-        count, count0, count1 = float(len(self.Label_list)), float(self.Label_list.count(0)), float(self.Label_list.count(1))
-        weights = [count / count0 if i == 0 else count / count1 for i in self.Label_list]
-        return weights, count0 / count1
-
-
-class FCN_Data(CNN_Data):
-    def __init__(self, Data_dir, exp_idx, stage, whole_volume=False, seed=1000, patch_size=47):
-        CNN_Data.__init__(self, Data_dir, exp_idx, stage, seed)
-        self.stage = stage
-        self.whole = whole_volume
-        self.patch_size = patch_size
-        self.patch_sampler = PatchGenerator(patch_size=self.patch_size)
-
-    def __getitem__(self, idx):
-        label = self.Label_list[idx]
-        data = np.load(self.Data_dir + self.Data_list[idx] + '.npy').astype(np.float32)
-        if self.stage == 'train' and not self.whole:
-            patch = self.patch_sampler.random_sample(data)
-            patch = np.expand_dims(patch, axis=0)
-            return patch, label
-        elif self.stage == 'valid_patch':
-            array_list = []
-            patch_locs = [[25, 90, 30], [115, 90, 30], [67, 90, 90], [67, 45, 60], [67, 135, 60]]
-            for i, loc in enumerate(patch_locs):
-                x, y, z = loc
-                patch = data[x:x+47, y:y+47, z:z+47]
-                array_list.append(np.expand_dims(patch, axis = 0))
-            data = Variable(torch.FloatTensor(np.stack(array_list, axis = 0)))
-            label = Variable(torch.LongTensor([label]*5))
-            return data, label
-        else:
-            data = np.expand_dims(padding(data, win_size=self.patch_size // 2), axis=0)
-            return data, label
-
 
 class Data(Dataset):
     """
@@ -122,6 +65,70 @@ class Data(Dataset):
         weights = [count/count0 if i == 0 else count/count1 for i in labels]
         return weights, count0 / count1
 
+
+class CNN_Data(Dataset):
+    """
+    csv files ./lookuptxt/*.csv contains MRI filenames along with demographic and diagnosis information
+    """
+    def __init__(self, Data_dir, exp_idx, stage, seed=1000):
+        random.seed(seed)
+        self.Data_dir = Data_dir
+        if stage in ['train', 'valid', 'test', 'valid_patch']:
+            self.Data_list, self.Label_list = read_csv('./lookupcsv/exp{}/{}.csv'.format(exp_idx, stage.replace('_patch', '')))
+        elif stage in ['ADNI', 'NACC', 'AIBL']:
+            self.Data_list, self.Label_list = read_csv('./lookupcsv/{}.csv'.format(stage))
+
+    def __len__(self):
+        return len(self.Data_list)
+
+    def __getitem__(self, idx):
+        label = self.Label_list[idx]
+        data = np.load(self.Data_dir + self.Data_list[idx] + '.npy').astype(np.float32)
+        data = np.expand_dims(data, axis=0)
+        return data, label
+
+    def get_sample_weights(self):
+        count, count0, count1 = float(len(self.Label_list)), float(self.Label_list.count(0)), float(self.Label_list.count(1))
+        weights = [count / count0 if i == 0 else count / count1 for i in self.Label_list]
+        return weights, count0 / count1
+
+
+class FCN_Data(CNN_Data):
+    def __init__(self, Data_dir, exp_idx, stage, whole_volume=False, seed=1000, patch_size=47):
+        CNN_Data.__init__(self, Data_dir, exp_idx, stage, seed)
+        self.stage = stage
+        self.whole = whole_volume
+        self.patch_size = patch_size
+        self.patch_sampler = PatchGenerator(patch_size=self.patch_size)
+        self.cache = []
+        
+    def __getitem__(self, idx):
+        if self.whole:
+            data = np.load(self.Data_dir + self.Data_list[idx] + '.npy').astype(np.float32)
+            data = np.expand_dims(padding(data, win_size=self.patch_size // 2), axis=0)
+            label = self.Label_list[idx]
+            return data, label
+        elif self.stage == 'valid_patch' and len(self.cache) == len(self.Label_list): 
+            return self.cache[idx]
+        elif self.stage == 'valid_patch':
+            label = self.Label_list[idx]
+            data = np.load(self.Data_dir + self.Data_list[idx] + '.npy', mmap_mode='r').astype(np.float32)
+            array_list = []
+            patch_locs = [[25, 90, 30], [115, 90, 30], [67, 90, 90], [67, 45, 60], [67, 135, 60]]
+            for i, loc in enumerate(patch_locs):
+                x, y, z = loc
+                patch = data[x:x+47, y:y+47, z:z+47]
+                array_list.append(np.expand_dims(patch, axis = 0))
+            data = Variable(torch.FloatTensor(np.stack(array_list, axis = 0)))
+            label = Variable(torch.LongTensor([label]*5))
+            self.cache.append((data, label))
+            return data, label
+        elif self.stage == 'train':
+            label = self.Label_list[idx]
+            data = np.load(self.Data_dir + self.Data_list[idx] + '.npy', mmap_mode='r').astype(np.float32)
+            patch = self.patch_sampler.random_sample(data)
+            patch = np.expand_dims(patch, axis=0)
+            return patch, label
 
 class PatchGenerator:
     def __init__(self, patch_size):
@@ -186,8 +193,8 @@ class GAN_Data(Dataset):
 
     def __getitem__(self, idx):
         index = self.index_list[idx]
-        data_lo = np.load(self.Data_dir + self.Data_list_lo[index]).astype(np.float32)
-        data_hi = np.load(self.Data_dir + self.Data_list_hi[index]).astype(np.float32)
+        data_lo = np.load(self.Data_dir + self.Data_list_lo[index], mmap_mode='r').astype(np.float32)
+        data_hi = np.load(self.Data_dir + self.Data_list_hi[index], mmap_mode='r').astype(np.float32)
         if self.stage == 'train_p':
             patch_lo, patch_hi = self.patchsampler.random_sample(data_lo, data_hi)
             return np.expand_dims(patch_lo, axis=0), np.expand_dims(patch_hi, axis=0)
@@ -195,6 +202,64 @@ class GAN_Data(Dataset):
             return np.expand_dims(data_lo, axis=0), self.Label_list[index]
         else:
             return np.expand_dims(data_lo, axis=0), np.expand_dims(data_hi, axis=0), self.Label_list[index]
+
+
+class MLP_Data(Dataset):
+    def __init__(self, Data_dir, exp_idx, stage, roi_threshold, roi_count, choice, seed=1000):
+        random.seed(seed)
+        self.exp_idx = exp_idx
+        self.Data_dir = Data_dir
+        self.roi_threshold = roi_threshold
+        self.roi_count = roi_count
+        if choice == 'count':
+            self.select_roi_count()
+        else:
+            self.select_roi_thres()
+        if stage in ['train', 'valid', 'test']:
+            self.path = './lookupcsv/exp{}/{}.csv'.format(exp_idx, stage)
+        else:
+            self.path = './lookupcsv/{}.csv'.format(stage)
+        self.Data_list, self.Label_list, self.demor_list = read_csv_complete(self.path)
+        self.risk_list = [get_AD_risk(np.load(Data_dir+filename+'.npy'))[self.roi] for filename in self.Data_list]
+        self.in_size = self.risk_list[0].shape[0]
+        
+    def select_roi_thres(self):
+        self.roi = np.load(self.Data_dir + 'train_MCC.npy')
+        self.roi = self.roi > self.roi_threshold
+        for i in range(self.roi.shape[0]):
+            for j in range(self.roi.shape[1]):
+                for k in range(self.roi.shape[2]):
+                    if i%3!=0 or j%2!=0 or k%3!=0:
+                        self.roi[i,j,k] = False
+
+    def select_roi_count(self):
+        self.roi = np.load(self.Data_dir + 'train_MCC.npy')
+        tmp = []
+        for i in range(self.roi.shape[0]):
+            for j in range(self.roi.shape[1]):
+                for k in range(self.roi.shape[2]):
+                    if i%3!=0 or j%2!=0 or k%3!=0: continue
+                    tmp.append((self.roi[i,j,k], i, j, k))
+        tmp.sort()
+        tmp = tmp[-self.roi_count:]
+        self.roi = self.roi != self.roi
+        for _, i, j, k in tmp:
+            self.roi[i,j,k] = True
+
+    def __len__(self):
+        return len(self.Data_list)
+
+    def __getitem__(self, idx):
+        label = self.Label_list[idx]
+        risk = self.risk_list[idx]
+        demor = self.demor_list[idx]
+        return risk, label, np.asarray(demor).astype(np.float32)
+
+    def get_sample_weights(self):
+        count, count0, count1 = float(len(self.Label_list)), float(self.Label_list.count(0)), float(self.Label_list.count(1))
+        weights = [count / count0 if i == 0 else count / count1 for i in self.Label_list]
+        return weights, count0 / count1
+
 
 
 if __name__ == "__main__":

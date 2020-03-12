@@ -60,22 +60,19 @@ def timeit(method):
     return timed
 
 def iqa_tensor(tensor, eng, filename, metric, target):
-    if not os.path.isdir(target):
-        os.mkdir(target)
+    # if not os.path.isdir(target):
+    #     os.mkdir(target)
     out = []
     if metric == 'brisque':
         func = eng.brisque
     elif metric == 'niqe':
         func = eng.niqe
+    elif metric == 'piqe':
+        func = eng.piqe
 
     for side in range(len(tensor.shape)):
-        start = 30
-        end = tensor.shape[side]-30
-        step = (end-start)//10
         vals = []
-        # for slice_idx in range(start, end, step):
-        # for slice_idx in [50, 80, 110]:
-        for slice_idx in [50]:
+        for slice_idx in [80]:
             if side == 0:
                 img = tensor[slice_idx, :, :]
             elif side == 1:
@@ -84,7 +81,6 @@ def iqa_tensor(tensor, eng, filename, metric, target):
                 img = tensor[:, :, slice_idx]
             img = matlab.double(img.tolist())
             vals += [func(img)]
-        # out += [vals]
         out += vals
         break
     val_avg = sum(out) / len(out)
@@ -387,6 +383,25 @@ def DPM_statistics(DPMs, Labels):
     F1 = 2*TP/(2*TP+FP+FN)
     MCC = (TP*TN-FP*FN)/(np.sqrt((TP+FP)*(TP+FN)*(TN+FP)*(TN+FN))+0.00000001*np.ones(shape))
     return matrix, ACCU, F1, MCC
+
+def read_csv_complete(filename):
+    with open(filename, 'r') as f:
+        reader = csv.reader(f)
+        your_list = list(reader)
+    filenames, labels, demors = [], [], []
+    for line in your_list:
+        try:
+            demor = list(map(float, line[2:5]))
+            gender = [0, 1] if demor[1] == 1 else [1, 0]
+            demor = [(demor[0]-70.0)/10.0] + gender + [(demor[2]-27)/2]
+            # demor = [demor[0]] + gender + demor[2:]
+        except:
+            continue
+        filenames.append(line[0])
+        label = 0 if line[1]=='NL' else 1
+        labels.append(label)
+        demors.append(demor)
+    return filenames, labels, demors
 
 
 # if __name__ == "__main__":
