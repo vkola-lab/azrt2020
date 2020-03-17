@@ -8,6 +8,7 @@ from torch.autograd import Variable
 from utils import read_txt, read_csv, padding, read_csv_complete, get_AD_risk
 import random
 import copy
+import matplotlib.pyplot as plt
 
 """
 to do list:
@@ -16,6 +17,30 @@ to do list:
     3. for those 82 cases, 1.5T has inconsistency between data/datasets/ADNI and /data/MRI_GAN/
     4. in filename.txt maybe put complete path of data, no need to assign data_dir
 """
+class Augment:
+    def __init__(self):
+        self.contrast_factor = 0.2
+        self.bright_factor = 0.4
+        self.sig_factor = 0.2
+
+    def change_contrast(self, image):
+        ratio = 1 + (random.random() - 0.5)*self.contrast_factor
+        return image.mean() + ratio*(image - image.mean())
+
+    def change_brightness(self, image):
+        val = (random.random() - 0.5)*self.bright_factor
+        return image + val
+
+    def add_noise(self, image):
+        sig = random.random() * self.sig_factor
+        return np.random.normal(0, sig, image.shape) + image
+
+    def apply(self, image):
+        image = self.change_contrast(image)
+        image = self.change_brightness(image)
+        image = self.add_noise(image)
+        return image
+
 
 class Data(Dataset):
     """
@@ -94,9 +119,10 @@ class CNN_Data(Dataset):
 
 
 class FCN_Data(CNN_Data):
-    def __init__(self, Data_dir, exp_idx, stage, whole_volume=False, seed=1000, patch_size=47):
+    def __init__(self, Data_dir, exp_idx, stage, transform=None, whole_volume=False, seed=1000, patch_size=47):
         CNN_Data.__init__(self, Data_dir, exp_idx, stage, seed)
         self.stage = stage
+        self.transform = transform
         self.whole = whole_volume
         self.patch_size = patch_size
         self.patch_sampler = PatchGenerator(patch_size=self.patch_size)
@@ -127,6 +153,8 @@ class FCN_Data(CNN_Data):
             label = self.Label_list[idx]
             data = np.load(self.Data_dir + self.Data_list[idx] + '.npy', mmap_mode='r').astype(np.float32)
             patch = self.patch_sampler.random_sample(data)
+            if self.transform:
+                patch = self.transform.apply(patch).astype(np.float32)
             patch = np.expand_dims(patch, axis=0)
             return patch, label
 
@@ -263,14 +291,24 @@ class MLP_Data(Dataset):
 
 
 if __name__ == "__main__":
-    dataset = GAN_Data(Data_dir='/data/datasets/ADNI_NoBack/', stage='train_w')
-    sample_weight = dataset.get_sample_weights()
-    sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight, len(sample_weight))
-    train_w_dataloader = DataLoader(dataset, batch_size=3, sampler=sampler)
-    for scan1, scan2, label in train_w_dataloader:
-        print(label)
-    for scan1, scan2, label in train_w_dataloader:
-        print(label)
+    transform = Augment()
+    dataset = FCN_Data(Data_dir='/data/datasets/ADNI_NoBack/', exp_idx=0, stage='train', transform=None)
+    train_dataloader = DataLoader(dataset, batch_size=1)
+    for scan1, label in train_dataloader:
+        print(scan1.shape)
+        # scan1 = scan1.data.squeeze().numpy()
+        # plt.imshow(scan1[20, :, :], cmap='gray', vmin=-1, vmax=2.5)
+        # plt.show()
+
+
+    # dataset = GAN_Data(Data_dir='/data/datasets/ADNI_NoBack/', stage='train_w')
+    # sample_weight = dataset.get_sample_weights()
+    # sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight, len(sample_weight))
+    # train_w_dataloader = DataLoader(dataset, batch_size=3, sampler=sampler)
+    # for scan1, scan2, label in train_w_dataloader:
+    #     print(label)
+    # for scan1, scan2, label in train_w_dataloader:
+    #     print(label)
 
     # dataloader = DataLoader(dataset, batch_size=10)
     # for scan1, scan2, label in dataloader:

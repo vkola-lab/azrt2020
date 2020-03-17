@@ -11,7 +11,7 @@ import numpy as np
 import matlab.engine
 import shutil
 from torch.utils.data import Dataset, DataLoader
-from dataloader import Data, GAN_Data, CNN_Data, FCN_Data, MLP_Data
+from dataloader import Data, GAN_Data, CNN_Data, FCN_Data, MLP_Data, Augment
 from models import Vanila_CNN, Vanila_CNN_Lite, _netD, _netG, _FCN, _MLP
 from utils import *
 from tqdm import tqdm
@@ -127,12 +127,13 @@ class CNN_Wrapper:
 
 
 class FCN_Wrapper(CNN_Wrapper):
-    def __init__(self, fil_num, drop_rate, seed, batch_size, balanced, Data_dir, exp_idx, model_name, metric, patch_size, lr):
+    def __init__(self, fil_num, drop_rate, seed, batch_size, balanced, Data_dir, exp_idx, model_name, metric, patch_size, lr, augment=False):
         self.seed = seed
         self.exp_idx = exp_idx
         self.Data_dir = Data_dir
         self.patch_size = patch_size
         self.model_name = model_name
+        self.augment = augment
         self.eval_metric = get_accu if metric == 'accuracy' else get_MCC
         self.model = _FCN(num=fil_num, p=drop_rate).cuda()
         self.prepare_dataloader(batch_size, balanced, Data_dir)
@@ -169,7 +170,10 @@ class FCN_Wrapper(CNN_Wrapper):
         return valid_matrix
 
     def prepare_dataloader(self, batch_size, balanced, Data_dir):
-        train_data = FCN_Data(Data_dir, self.exp_idx, stage='train', seed=self.seed, patch_size=self.patch_size)
+        if self.augment:
+            train_data = FCN_Data(Data_dir, self.exp_idx, stage='train', seed=self.seed, patch_size=self.patch_size, transform=Augment())
+        else:
+            train_data = FCN_Data(Data_dir, self.exp_idx, stage='train', seed=self.seed, patch_size=self.patch_size, transform=None)
         sample_weight, self.imbalanced_ratio = train_data.get_sample_weights()
         if balanced == 1:
             sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight, len(sample_weight))
@@ -201,8 +205,7 @@ class FCN_Wrapper(CNN_Wrapper):
                 matrix, ACCU, F1, MCC = DPM_statistics(DPMs, Labels) 
                 np.save(self.DPMs_dir + '{}_MCC.npy'.format(stage), MCC)
                 np.save(self.DPMs_dir + '{}_F1.npy'.format(stage),  F1)
-                np.save(self.DPMs_dir + '{}_ACCU.npy'.format(stage), ACCU)  
-                # print(stage + ' confusion matrix ', matrix, ' accuracy ', self.eval_metric(matrix))
+                np.save(self.DPMs_dir + '{}_ACCU.npy'.format(stage), ACCU)
         print('DPM generation is done')
 
 
