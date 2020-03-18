@@ -19,7 +19,7 @@ def plot_legend(axes, crv_lgd_hdl, crv_info, neo_lgd_hdl):
             hdl[ds] += neo_lgd_hdl[ds]
             val[ds] += ['Neurologist', 'Avg. Neurologist']
 
-    convert = {'mlp_fcn':"1.5T", 'mlp_fcn_gan':"1.5T*"}
+    convert = {'mlp_fcn':"1.5T", 'mlp_fcn_gan':"1.5T+", 'mlp_fcn_aug':'1.5T Aug'}
 
     for ds in ds_name:
         for m in m_name:
@@ -31,9 +31,9 @@ def plot_legend(axes, crv_lgd_hdl, crv_info, neo_lgd_hdl):
                         bbox_to_anchor=(0.04, 0.04, 0.5, 0.5),
                         loc='lower left')
 
-def roc_plot_perfrom_table(txt_file=None):
+def roc_plot_perfrom_table(txt_file=None, mode=['mlp_fcn', 'mlp_fcn_gan']):
     roc_info, pr_info = {}, {}
-    for m in ['mlp_fcn', 'mlp_fcn_gan']:
+    for m in mode:
         roc_info[m], pr_info[m] = {}, {}
         for ds in ['test', 'AIBL', 'NACC']:
             Scores, Labels = [], []
@@ -50,44 +50,43 @@ def roc_plot_perfrom_table(txt_file=None):
     plt.rcParams['figure.facecolor'] = 'w'
     plt.rcParams['savefig.facecolor'] = 'w'
 
-    convert = {'mlp_fcn':"1.5T", 'mlp_fcn_gan':"1.5T+"}
+    convert = {'mlp_fcn':"1.5T", 'mlp_fcn_gan':"1.5T+", 'mlp_fcn_aug':'1.5T Aug'}
 
     # roc plot
     fig, axes_ = plt.subplots(1, 3, figsize=[18, 6], dpi=100)
     axes = dict(zip(['test', 'AIBL', 'NACC'], axes_))
-    hdl_crv = {'mlp_fcn': {}, 'mlp_fcn_gan': {}}
+    lines = ['solid', '-.', '-']
+    hdl_crv = {m:{} for m in mode}
     for i, ds in enumerate(['test', 'AIBL', 'NACC']):
         title = ds
         i += 1
-        hdl_crv['mlp_fcn'][ds] = plot_curve(curve='roc', **roc_info['mlp_fcn'][ds], ax=axes[ds],
-                                    **{'color': 'C{}'.format(i), 'hatch': '//////', 'alpha': .4, 'line': 'solid',
+        for j, m in enumerate(mode):
+            hdl_crv[m][ds] = plot_curve(curve='roc', **roc_info[m][ds], ax=axes[ds],
+                                    **{'color': 'C{}'.format(i), 'hatch': '//////', 'alpha': .4, 'line': lines[j],
                                         'title': title})
-        hdl_crv['mlp_fcn_gan'][ds] = plot_curve(curve='roc', **roc_info['mlp_fcn_gan'][ds], ax=axes[ds],
-                                    **{'color': 'C{}'.format(i), 'hatch': '....', 'alpha': .4, 'line': 'dashed',
-                                        'title': title})
+
     plot_legend(axes=axes, crv_lgd_hdl=hdl_crv, crv_info=roc_info, neo_lgd_hdl=None)
-    fig.savefig('./plot/roc.tif', dpi=50)
+    fig.savefig('./plot/roc.png', dpi=300)
 
     # pr plot
     fig, axes_ = plt.subplots(1, 3, figsize=[18, 6], dpi=100)
     axes = dict(zip(['test', 'AIBL', 'NACC'], axes_))
-    hdl_crv = {'mlp_fcn': {}, 'mlp_fcn_gan': {}}
+    hdl_crv = {m: {} for m in mode}
     for i, ds in enumerate(['test', 'AIBL', 'NACC']):
         title = ds
         i += 1
-        hdl_crv['mlp_fcn'][ds] = plot_curve(curve='pr', **pr_info['mlp_fcn'][ds], ax=axes[ds],
-                                    **{'color': 'C{}'.format(i), 'hatch': '//////', 'alpha': .4, 'line': 'solid',
+        for j, m in enumerate(mode):
+            hdl_crv[m][ds] = plot_curve(curve='pr', **pr_info[m][ds], ax=axes[ds],
+                                    **{'color': 'C{}'.format(i), 'hatch': '//////', 'alpha': .4, 'line': lines[j],
                                         'title': title})
-        hdl_crv['mlp_fcn_gan'][ds] = plot_curve(curve='pr', **pr_info['mlp_fcn_gan'][ds], ax=axes[ds],
-                                    **{'color': 'C{}'.format(i), 'hatch': '....', 'alpha': .4, 'line': 'dashed',
-                                        'title': title})
+
     plot_legend(axes=axes, crv_lgd_hdl=hdl_crv, crv_info=pr_info, neo_lgd_hdl=None)
-    fig.savefig('./plot/pr.tif', dpi=50)
+    fig.savefig('./plot/pr.png', dpi=300)
 
     table = collections.defaultdict(dict)
 
     for i, ds in enumerate(['valid', 'test', 'AIBL', 'NACC']):
-        for m in ['mlp_fcn', 'mlp_fcn_gan']:
+        for m in mode:
             Matrix = []
             for exp_idx in range(1):
                 for repe_idx in range(5):
@@ -100,20 +99,16 @@ def roc_plot_perfrom_table(txt_file=None):
                             '{0:.4f}+/-{1:.4f}'.format(f1_m, f1_s),
                             '{0:.4f}+/-{1:.4f}'.format(mcc_m, mcc_s)]
 
-
-    print('################################################################ 1.5T')
-    cnn_table = [[ds]+table[ds]['mlp_fcn'] for ds in ['valid', 'test', 'AIBL', 'NACC']]
-    print(tabulate(cnn_table,
-    headers=['dataset', 'accuracy', 'sensitivity', 'specificity', 'F-1', 'MCC']))
-
-    print('################################################################ 1.5T*')
-    cnnp_table = [[ds]+table[ds]['mlp_fcn_gan'] for ds in ['valid', 'test', 'AIBL', 'NACC']]
-    print(tabulate(cnnp_table,
-    headers=['dataset', 'accuracy', 'sensitivity', 'specificity', 'F-1', 'MCC']))
+    cnn_table = {}
+    for m in mode:
+        print('################################################################ ' + m)
+        cnn_table[m] = [[ds]+table[ds][m] for ds in ['valid', 'test', 'AIBL', 'NACC']]
+        print(tabulate(cnn_table[m],
+        headers=['dataset', 'accuracy', 'sensitivity', 'specificity', 'F-1', 'MCC']))
 
     if txt_file:
         with open(txt_file, 'a') as f:
-            line = tabulate(cnnp_table, headers=['dataset', 'accuracy', 'sensitivity', 'specificity', 'F-1', 'MCC'])
+            line = tabulate(cnn_table['fcn_gan'], headers=['dataset', 'accuracy', 'sensitivity', 'specificity', 'F-1', 'MCC'])
             f.write(str(line) + '\n')
 
 if __name__ == "__main__":
