@@ -19,11 +19,11 @@ import numpy as np
 
 def gan_main():
     gan = FCN_GAN('./gan_config_optimal.json', 0)
-    gan.train()
-    gan.generate()
-    gan.load_trained_FCN('./cnn_config.json', exp_idx=0)
+    # gan.train()
+    gan.generate(epoch=3900)
+    gan.load_trained_FCN('./cnn_config.json', exp_idx=0,epoch=3900)
     gan.fcn.test_and_generate_DPMs()
-    plot_heatmap('/home/sq/gan2020/DPMs/fcn_gan_exp', 'fcngan_heatmap', exp_idx=0, figsize=(9, 4))
+    # plot_heatmap('./DPMs/fcn_gan_exp', 'fcngan_heatmap', exp_idx=0, figsize=(9, 4))
     return gan
 
 def eval_iqa_all(metrics=['brisque', 'niqe', 'piqe']):
@@ -131,9 +131,9 @@ def fcn_main(repe_time, model_name, fcn_setting):
                         seed            = 1000,
                         model_name      = 'fcn',
                         metric          = 'accuracy')
-        # fcn.train(epochs = fcn_setting['train_epochs'])
+        fcn.train(epochs = fcn_setting['train_epochs'])
         # fcn.optimal_epoch = 1700
-        # fcn.test_and_generate_DPMs()
+        fcn.test_and_generate_DPMs()
         plot_heatmap('/home/sq/gan2020/DPMs/fcn_exp', 'fcn_heatmap', exp_idx=exp_idx, figsize=(9, 4))
 
 def mlp_main(exp_time, repe_time, model_name, mode, mlp_setting):
@@ -163,20 +163,20 @@ def post_evaluate():
         gan.generate(epoch=epoch)  # 45 s
         gan.fcn.test_and_generate_DPMs() # 150 s
         mlp_main(1, 5, 'mlp_fcn_gan', 'gan_', cnn_config['mlp']) # 180 s
-        roc_plot_perfrom_table()  
+        roc_plot_perfrom_table()
         eval_iqa_validation() # quick
 
 
 if __name__ == "__main__":
     # post_evaluate()
 
-    # cnn_config = read_json('./cnn_config.json')
-    # gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
+    cnn_config = read_json('./cnn_config.json')
+    gan = gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
+    eval_iqa_all()  # evaluate image quality (niqe, piqe, brisque) on 1.5T and 1.5T*
+    # gan.eval_iqa_orig(names=['valid'])
+    # train_plot(gan.iqa_hash) # plot image quality, accuracy change as function of time; scatter plots between variables
     # mlp_main(1, 5, 'mlp_fcn_gan', 'gan_', cnn_config['mlp']) # train 5 mlp models with random seeds on generated DPMs from FCN-GAN
-    roc_plot_perfrom_table()  # plot roc and pr curve; print mlp performance table
-    # eval_iqa_all()  # evaluate image quality (niqe, piqe, brisque) on 1.5T and 1.5T* 
-    # train_plot()    # plot image quality, accuracy change as function of time; scatter plots between variables
 
-    
     # fcn_main(5, 'fcn', cnn_config['fcn'])
     # mlp_main(1, 5, 'mlp_fcn', '', cnn_config['mlp'])
+    # roc_plot_perfrom_table()  # plot roc and pr curve; print mlp performance table

@@ -92,12 +92,12 @@ def roc_plot_perfrom_table(txt_file=None):
             for exp_idx in range(1):
                 for repe_idx in range(5):
                     labels, scores = read_raw_score('checkpoint_dir/{}_exp{}/raw_score_{}_{}.txt'.format(m, exp_idx, ds, repe_idx))
-                    Matrix.append(confusion_matrix(labels, scores)) 
+                    Matrix.append(confusion_matrix(labels, scores))
             accu_m, accu_s, sens_m, sens_s, spec_m, spec_s, f1_m, f1_s, mcc_m, mcc_s = stat_metric(Matrix)
-            table[ds][m] = ['{0:.4f}+/-{1:.4f}'.format(accu_m, accu_s), 
-                            '{0:.4f}+/-{1:.4f}'.format(sens_m, sens_s), 
-                            '{0:.4f}+/-{1:.4f}'.format(spec_m, spec_s), 
-                            '{0:.4f}+/-{1:.4f}'.format(f1_m, f1_s), 
+            table[ds][m] = ['{0:.4f}+/-{1:.4f}'.format(accu_m, accu_s),
+                            '{0:.4f}+/-{1:.4f}'.format(sens_m, sens_s),
+                            '{0:.4f}+/-{1:.4f}'.format(spec_m, spec_s),
+                            '{0:.4f}+/-{1:.4f}'.format(f1_m, f1_s),
                             '{0:.4f}+/-{1:.4f}'.format(mcc_m, mcc_s)]
 
 
@@ -108,7 +108,7 @@ def roc_plot_perfrom_table(txt_file=None):
 
     print('################################################################ 1.5T*')
     cnnp_table = [[ds]+table[ds]['mlp_fcn_gan'] for ds in ['valid', 'test', 'AIBL', 'NACC']]
-    print(tabulate(cnnp_table, 
+    print(tabulate(cnnp_table,
     headers=['dataset', 'accuracy', 'sensitivity', 'specificity', 'F-1', 'MCC']))
 
     if txt_file:

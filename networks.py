@@ -24,6 +24,9 @@ from tabulate import tabulate
 1. augmentation, small rotation,
 2. hyperparameter auto tunning
 3. early stopping or set epoch
+
+want positive changes
+
 """
 
 class CNN_Wrapper:
@@ -198,16 +201,16 @@ class FCN_Wrapper(CNN_Wrapper):
                     np.save(self.DPMs_dir + filenames[idx] + '.npy', DPM)
                     DPMs.append(DPM)
                     Labels.append(labels)
-                matrix, ACCU, F1, MCC = DPM_statistics(DPMs, Labels) 
+                matrix, ACCU, F1, MCC = DPM_statistics(DPMs, Labels)
                 np.save(self.DPMs_dir + '{}_MCC.npy'.format(stage), MCC)
                 np.save(self.DPMs_dir + '{}_F1.npy'.format(stage),  F1)
-                np.save(self.DPMs_dir + '{}_ACCU.npy'.format(stage), ACCU)  
+                np.save(self.DPMs_dir + '{}_ACCU.npy'.format(stage), ACCU)
                 # print(stage + ' confusion matrix ', matrix, ' accuracy ', self.eval_metric(matrix))
         print('DPM generation is done')
 
 
 class FCN_GAN:
-    def __init__(self, config, exp_idx, seed):
+    def __init__(self, config, exp_idx, seed=1000):
         self.seed = seed
         self.exp_idx = exp_idx
         self.iqa_hash = collections.defaultdict(dict)
@@ -227,7 +230,6 @@ class FCN_GAN:
         self.iqa_name = self.config["iqa_name"]
         self.eng = matlab.engine.start_matlab()
         self.save_every_epoch = self.config["save_every_epoch"]
-        self.eval_iqa_orig()
 
     def initial_FCN(self, json_file, exp_idx):
         # initialize FCN from scratch for FCN_GAN training
@@ -279,6 +281,7 @@ class FCN_GAN:
         self.NACC_geneloader       = CNN_Data('./NACCP_NoBack/', self.exp_idx, stage='NACC', seed=self.seed)  # image evaluation
 
     def train(self):
+        self.eval_iqa_orig()
         self.log = open(self.log_name, 'w')
         self.log.close()
         self.G_lr, self.D_lr = self.config["G_lr"], self.config["D_lr"]
@@ -337,14 +340,20 @@ class FCN_GAN:
             loss_G_GAN = self.criterion(Goutput, Glabel)
             # get gradient for G network with L1 norm between real and fake
             loss_G_dif = torch.mean(torch.abs(Mask))
+
+            # added difference between 1.5T* and 3T
+            loss_G_3 = torch.mean(torch.abs(Output-patch_hi))
+            # loss_G_3 = 0
+
+
             # get gradient for G network and FCN from AD_loss
             pred = self.fcn.model(patch)
             AD_loss = self.fcn.criterion(pred, AD_label)
 
             if warmup_G:
-                loss_G = self.config["L1_norm_factor"] * loss_G_dif
-            else:              
-                loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_GAN + self.config["L1_norm_factor"] * AD_loss
+                loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_3
+            else:
+                loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_GAN + self.config["L1_norm_factor"] * AD_loss + loss_G_3
             loss_G.backward()
 
             self.fcn.optimizer.step()
@@ -354,13 +363,15 @@ class FCN_GAN:
 
             if self.epoch % self.save_every_epoch == 0 or (self.epoch % self.save_every_epoch == 0 and self.epoch > self.config["warm_D_epoch"]):
                 with open(self.log_name, 'a') as f:
-                    out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n'
+                    out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G_3: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n'
                           % (self.epoch, self.config['epochs'], idx, len(self.gan_train_dataloader), Routput.data.cpu().mean(),
-                             Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
+                             Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G_3.cpu().sum().item(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
                     f.write(out)
-                print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f'
+                print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G_3: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f'
                       % (self.epoch, self.config['epochs'], idx, len(self.gan_train_dataloader), Routput.data.cpu().mean(),
-                         Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
+                         Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G_3.cpu().sum().item(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
+                if loss_G < 0:
+                    print(loss_G, loss_G_3, loss_G_dif, loss_G_GAN)
 
     def valid_model_epoch(self):
         # forward 5 representative patches into netG and then fcn to get accuracy on validation set
@@ -397,7 +408,7 @@ class FCN_GAN:
         torch.save(self.fcn.model.state_dict(), '{}fcn_{}.pth'.format(self.checkpoint_dir, self.epoch))
         if valid_metric >= self.valid_optimal_metric:
             self.optimal_epoch = self.epoch
-            self.valid_optimal_metric = valid_metric 
+            self.valid_optimal_metric = valid_metric
 
     def generate(self, dataset_name=['ADNI', 'NACC', 'AIBL'], epoch=None):
         if epoch:
@@ -434,11 +445,11 @@ class FCN_GAN:
             self.fcn.model.load_state_dict(torch.load('{}fcn_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch)))
         self.fcn.test_and_generate_DPMs(stages=stages)
 
-    def eval_iqa_orig(self, metrics=['brisque', 'niqe', 'piqe']):
+    def eval_iqa_orig(self, metrics=['brisque', 'niqe', 'piqe'], names=['valid', 'test', 'NACC', 'AIBL']):
         self.iqa_log = open(self.iqa_name, 'w')
         self.iqa_log.close()
         for m in metrics:
-            for dataset, name in zip([self.ADNI_valid_dataloader, self.ADNI_test_dataloader, self.NACC_dataloader, self.AIBL_dataloader], ['valid', 'test', 'NACC', 'AIBL']):
+            for dataset, name in zip([self.ADNI_valid_dataloader, self.ADNI_test_dataloader, self.NACC_dataloader, self.AIBL_dataloader], names):
                 iqa_oris = []
                 for input, _ in dataset:
                     input = input.squeeze()
@@ -533,7 +544,7 @@ class MLP_Wrapper(CNN_Wrapper):
         self.valid_dataloader = DataLoader(valid_data, batch_size=1, shuffle=False)
         self.test_dataloader = DataLoader(test_data, batch_size=1, shuffle=False)
         self.in_size = train_data.in_size
-    
+
     def train(self, lr, epochs):
         self.optimizer = optim.Adam(self.model.parameters(), lr=lr, betas=(0.5, 0.999))
         self.criterion = nn.CrossEntropyLoss(weight=torch.Tensor([1, self.imbalanced_ratio]))
@@ -604,8 +615,8 @@ if __name__ == "__main__":
 """
 fcn-gan pipeline:
 
-fcn-gan train;  
-select optimal timepoint: (a) patch validation accuracy highest 
+fcn-gan train;
+select optimal timepoint: (a) patch validation accuracy highest
                           (b) plot niqe, accuracy on validtion
 
 """
