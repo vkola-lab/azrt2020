@@ -8,7 +8,7 @@ import torch
 import sys
 sys.path.insert(1, './plot/')
 from plot import roc_plot_perfrom_table
-from train_curve_plot import train_plot
+from train_curve_plot import train_plot, parse_metric
 from heatmap import plot_heatmap
 import matlab.engine
 import os
@@ -16,13 +16,18 @@ import shutil
 from torch.utils.data import Dataset, DataLoader
 from dataloader import Data, GAN_Data, CNN_Data
 import numpy as np
+from glob import glob
+import imageio
+import matplotlib.pyplot as plt
 
 def gan_main():
     gan = FCN_GAN('./gan_config_optimal.json', 0)
+    # gan.sample(epoch=1110)
     # gan.train()
-    gan.generate(epoch=3900)
-    gan.load_trained_FCN('./cnn_config.json', exp_idx=0,epoch=3900)
-    gan.fcn.test_and_generate_DPMs()
+    # gan.generate(epoch=3900)
+    # gan.generate(epoch=1110)
+    # gan.load_trained_FCN('./cnn_config.json', exp_idx=0,epoch=3900)
+    # gan.fcn.test_and_generate_DPMs()
     # plot_heatmap('./DPMs/fcn_gan_exp', 'fcngan_heatmap', exp_idx=0, figsize=(9, 4))
     return gan
 
@@ -79,13 +84,143 @@ def mlp_main(exp_time, repe_time, model_name, mode, mlp_setting):
                       epochs = mlp_setting['train_epochs'])
             mlp.test(repe_idx)
 
+def get_best_iqa():
+    METRIC = {}
+    Epoch = []
+
+    png_files = glob('./output/*.png')
+
+    for png in png_files:
+        content = parse_metric(png.split('/')[-1])
+        METRIC[content[0]] = content[1:]
+
+    txt_file = './fcn_gan_log.txt'
+    log = []
+    with open(txt_file, 'r') as f:
+        for line in f:
+            if 'validation accuracy' in line:
+                log.append(float(line.strip('\n').replace('validation accuracy ', '')))
+
+    for i, epoch in enumerate(range(0, 6000, 30)):
+        METRIC[epoch].append(log[i])
+
+    METRIC = sorted(METRIC.items())
+    x, y = zip(*METRIC)
+    # print(np.array(y))
+    x, y = np.asarray(x), np.asarray(y)
+
+    metrics = ['niqe', 'piqe', 'brisque']
+    i = 0
+    out = []
+    for m in metrics:
+        if i == 0:
+            i+=1
+            continue
+        print(m)
+        out += list(np.argwhere(y[:, i] <= (np.amin(y[:, i]))))
+        print([[o[0]*30, y[:, i][o[0]]] for o in out])
+        i+=1
+    print(y[:, 1][33])
+
+def sample():
+    # print('Evaluating IQA results on all datasets:')
+    data  = []
+    names = ['ADNI', 'NACC', 'AIBL']
+    sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/AIBL_NoBack/"]
+    data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='test', shuffle=False)]
+    data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
+    data += [Data(sources[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
+    dataloaders = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
+    data = []
+    # targets = ["/home/sq/gan2020/ADNIP_NoBack/", "/home/sq/gan2020/NACCP_NoBack/", "/home/sq/gan2020/AIBLP_NoBack/"]
+    targets = ["./ADNIP_NoBack/", "./NACCP_NoBack/", "./AIBLP_NoBack/"]
+    data += [Data(targets[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='test', shuffle=False)]
+    data += [Data(targets[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
+    data += [Data(targets[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
+    dataloaders_p = [DataLoader(d, batch_size=1, shuffle=False) for d in data]
+    Data_lists = [d.Data_list for d in data]
+    out_dir = './output_eval/'
+    if os.path.isdir(out_dir):
+        shutil.rmtree(out_dir)
+    os.mkdir(out_dir)
+    for id in range(len(names)):
+        stop = 50
+        name = names[id]
+        Data_list = Data_lists[id]
+        dataloader = dataloaders[id]
+        dataloader_p = dataloaders_p[id]
+
+        if name == 'ADNI':
+            gd = GAN_Data("/data/datasets/ADNI_NoBack/", seed=1000, stage='train_p')
+            plt.set_cmap("gray")
+            plt.subplots_adjust(wspace=0.3, hspace=0.3)
+            fig, axs = plt.subplots(1, 4, figsize=(20,15))
+            for i, ((input_o, _), (input_p, _)) in enumerate(zip(dataloader, dataloader_p)):
+                # print(name, i)
+                input_o = np.load(gd.Data_dir + gd.Data_list_lo[i], mmap_mode='r').astype(np.float32)
+                input_t = np.load(gd.Data_dir + gd.Data_list_hi[i], mmap_mode='r').astype(np.float32)
+                input_p = np.load("./ADNIP_NoBack/" + gd.Data_list_lo[i], mmap_mode='r').astype(np.float32)
+                # print(name)
+                # imageio.imwrite(out_dir+'/'+name+'P/'+Data_list[i].replace('npy','tif'), input_p[:, 100, :])
+                # imageio.imwrite(out_dir+'/'+name+'O/'+Data_list[i].replace('npy','tif'), input[:, 100, :])
+                ori = input_o[:, 100, :]
+                gen = input_p[:, 100, :]
+                tar = input_t[:, 100, :]
+                # axs[0, 0].imshow(ori, vmin=-1, vmax=2.5)
+                axs[0].imshow(ori, vmin=-1, vmax=2.5)
+                axs[0].set_title('1.5T', fontsize=25)
+                axs[0].axis('off')
+                axs[1].imshow(gen, vmin=-1, vmax=2.5)
+                axs[1].set_title('1.5T*', fontsize=25)
+                axs[1].axis('off')
+                axs[2].imshow(tar, vmin=-1, vmax=2.5)
+                axs[2].set_title('3T', fontsize=25)
+                axs[2].axis('off')
+                axs[3].imshow(gen-ori, vmin=-1, vmax=2.5)
+                axs[3].set_title('mask', fontsize=25)
+                axs[3].axis('off')
+                plt.savefig(out_dir+name+'_train_'+str(i)+'.png', dpi=150)
+                plt.cla()
+                if i == stop:
+                    break
+
+        plt.set_cmap("gray")
+        plt.subplots_adjust(wspace=0.3, hspace=0.3)
+        fig, axs = plt.subplots(1, 3, figsize=(20,15))
+        for i, ((input_o, _), (input_p, _)) in enumerate(zip(dataloader, dataloader_p)):
+            # print(name, i)
+            input_o = input_o.squeeze().numpy()
+            input_p = input_p.squeeze().numpy()
+            # print(name)
+            # imageio.imwrite(out_dir+'/'+name+'P/'+Data_list[i].replace('npy','tif'), input_p[:, 100, :])
+            # imageio.imwrite(out_dir+'/'+name+'O/'+Data_list[i].replace('npy','tif'), input[:, 100, :])
+            ori = input_o[:, 100, :]
+            gen = input_p[:, 100, :]
+            # axs[0, 0].imshow(ori, vmin=-1, vmax=2.5)
+            axs[0].imshow(ori, vmin=-1, vmax=2.5)
+            axs[0].set_title('1.5T', fontsize=25)
+            axs[0].axis('off')
+            axs[1].imshow(gen, vmin=-1, vmax=2.5)
+            axs[1].set_title('1.5T*', fontsize=25)
+            axs[1].axis('off')
+            axs[2].imshow(gen-ori, vmin=-1, vmax=2.5)
+            axs[2].set_title('mask', fontsize=25)
+            axs[2].axis('off')
+            plt.savefig(out_dir+name+'_'+str(i)+'.png', dpi=150)
+            plt.cla()
+            if i == stop:
+                break
+
+
 if __name__ == "__main__":
 
-    cnn_config = read_json('./cnn_config.json')
+    # cnn_config = read_json('./cnn_config.json')
 
-    gan = gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
-    eval_iqa_all()  # evaluate image quality (niqe, piqe, brisque) on 1.5T and 1.5T*
+    # gan = gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
+    # gan.eval_iqa_orig()  # evaluate image quality (niqe, piqe, brisque) on 1.5T and 1.5T*
+    # gan.eval_iqa_gene()
     # gan.eval_iqa_orig(names=['valid'])
+    # get_best_iqa()
     # train_plot(gan.iqa_hash) # plot image quality, accuracy change as function of time; scatter plots between variables
     # mlp_main(1, 5, 'mlp_fcn_gan', 'gan_', cnn_config['mlp']) # train 5 mlp models with random seeds on generated DPMs from FCN-GAN
 
@@ -97,7 +232,8 @@ if __name__ == "__main__":
     # mlp_main(1, 5, 'mlp_fcn_gan', 'gan_', cnn_config['mlp']) # train 5 mlp models with random seeds on generated DPMs from FCN-GAN
     # mlp_main(1, 5, 'mlp_fcn', '', cnn_config['mlp'])
     # mlp_main(1, 5, 'mlp_fcn_aug', 'aug_', cnn_config['mlp'])
-    roc_plot_perfrom_table(mode=['mlp_fcn', 'mlp_fcn_aug'])  # plot roc and pr curve; print mlp performance table
+    # roc_plot_perfrom_table(mode=['mlp_fcn', 'mlp_fcn_aug'])  # plot roc and pr curve; print mlp performance table
 
     # fcn_main(5, 'fcn_aug', True, cnn_config['fcn'])
     # mlp_main(1, 5, 'mlp_fcn', '', cnn_config['mlp'])
+    sample()

@@ -393,13 +393,38 @@ class FCN_GAN:
                 valid_matrix = matrix_sum(valid_matrix, get_confusion_matrix(preds, labels))
         return get_accu(valid_matrix)
 
-    def gen_output_image(self, tensor, epoch):
+    def gen_output_image(self, tensor, epoch, pname=None, dir='./output/'):
         tensor = tensor.data.cpu().numpy()
-        if not os.path.exists('./output/'):
-            os.mkdir('./output/')
-        plt.imshow(tensor[0, 0, :, 20, :], cmap='gray', vmin=-1, vmax=2.5)
-        name = '#'.join(self.image_quality(tensor[0, 0, :, 20, :]))
-        plt.savefig('./output/{}#{}.png'.format(epoch, name))
+        if not os.path.exists(dir):
+            os.mkdir(dir)
+        plt.imshow(tensor[0, 0, :, 100, :], cmap='gray', vmin=-1, vmax=2.5)
+        name = '#'.join(self.image_quality(tensor[0, 0, :, 100, :]))
+        if pname:
+            plt.savefig(dir+pname+'{}#{}.png'.format(epoch, name))
+        else:
+            plt.savefig(dir+'{}#{}.png'.format(epoch, name))
+
+    def sample(self, epoch=None):
+        if epoch:
+            self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, epoch)))
+        else:
+            self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch)))
+
+        # print('generating now')
+        # d = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='all')
+        # Data_list = d.Data_list_lo
+        # dataloader = DataLoader(d, batch_size=1, shuffle=False)
+        dataloader = self.ADNI_valid_dataloader
+        with torch.no_grad():
+            self.netG.train(False)
+            # for j, (input_lo, input_hi, _) in enumerate(dataloader):
+            for j, item in enumerate(dataloader):
+                # print(j, item)
+                # output = input.cuda() + self.netG(input.cuda())
+                output = torch.tensor(input).cuda() + self.netG(torch.tensor(input).cuda())
+                self.gen_output_image(output, epoch, str(j), dir = './output_test/')
+                # self.gen_output_image(output, epoch, Data_list[j], dir = './output_test/')
+
 
     def image_quality(self, img):
         img = matlab.double(img.tolist())
