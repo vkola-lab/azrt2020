@@ -23,12 +23,12 @@ import matplotlib.pyplot as plt
 def gan_main():
     gan = FCN_GAN('./gan_config_optimal.json', 0)
     # gan.sample(epoch=1110)
-    # gan.train()
+    gan.train()
     # gan.generate(epoch=3900)
     # gan.generate(epoch=1110)
     # gan.load_trained_FCN('./cnn_config.json', exp_idx=0,epoch=3900)
-    # gan.fcn.test_and_generate_DPMs()
-    # plot_heatmap('./DPMs/fcn_gan_exp', 'fcngan_heatmap', exp_idx=0, figsize=(9, 4))
+    gan.fcn.test_and_generate_DPMs()
+    plot_heatmap('./DPMs/fcn_gan_exp', 'fcngan_heatmap', exp_idx=0, figsize=(9, 4))
     return gan
 
 
@@ -214,9 +214,9 @@ def sample():
 
 if __name__ == "__main__":
 
-    # cnn_config = read_json('./cnn_config.json')
+    cnn_config = read_json('./cnn_config.json')
 
-    # gan = gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
+    gan = gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
     # gan.eval_iqa_orig()  # evaluate image quality (niqe, piqe, brisque) on 1.5T and 1.5T*
     # gan.eval_iqa_gene()
     # gan.eval_iqa_orig(names=['valid'])
@@ -236,4 +236,4 @@ if __name__ == "__main__":
 
     # fcn_main(5, 'fcn_aug', True, cnn_config['fcn'])
     # mlp_main(1, 5, 'mlp_fcn', '', cnn_config['mlp'])
-    sample()
+    # sample()

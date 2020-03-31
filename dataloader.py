@@ -127,14 +127,14 @@ class FCN_Data(CNN_Data):
         self.patch_size = patch_size
         self.patch_sampler = PatchGenerator(patch_size=self.patch_size)
         self.cache = []
-        
+
     def __getitem__(self, idx):
         if self.whole:
             data = np.load(self.Data_dir + self.Data_list[idx] + '.npy').astype(np.float32)
             data = np.expand_dims(padding(data, win_size=self.patch_size // 2), axis=0)
             label = self.Label_list[idx]
             return data, label
-        elif self.stage == 'valid_patch' and len(self.cache) == len(self.Label_list): 
+        elif self.stage == 'valid_patch' and len(self.cache) == len(self.Label_list):
             return self.cache[idx]
         elif self.stage == 'valid_patch':
             label = self.Label_list[idx]
@@ -185,7 +185,7 @@ class PatchGenerator:
 
 
 class GAN_Data(Dataset):
-    def __init__(self, Data_dir, stage, ratio=(1, 0, 0), seed=1000):
+    def __init__(self, Data_dir, stage, ratio=(0.6, 0.2, 0.2), seed=1000):
         random.seed(seed)
         self.Data_dir = Data_dir
         Data_list0 = read_txt('./lookuptxt/', 'ADNI_1.5T_GAN_NL.txt')
@@ -250,7 +250,7 @@ class MLP_Data(Dataset):
         self.Data_list, self.Label_list, self.demor_list = read_csv_complete(self.path)
         self.risk_list = [get_AD_risk(np.load(Data_dir+filename+'.npy'))[self.roi] for filename in self.Data_list]
         self.in_size = self.risk_list[0].shape[0]
-        
+
     def select_roi_thres(self):
         self.roi = np.load(self.Data_dir + 'train_MCC.npy')
         self.roi = self.roi > self.roi_threshold

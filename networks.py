@@ -274,6 +274,8 @@ class FCN_GAN:
 
     def prepare_dataloader(self):
         self.gan_train_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_p'), batch_size=self.config['batch_size_p'], shuffle=True, drop_last=True) # gan patch train
+        self.gan_valid_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='valid'), batch_size=1)
+        self.gan_test_dataloader = DataLoader(GAN_Data(self.config['Data_dir'], seed=self.seed, stage='test'), batch_size=1)
         self.AD_train_dataloader = self.fcn.train_dataloader # fcn patch train
         self.AD_valid_dataloader = self.fcn.valid_dataloader # fcn patch valid
         self.ADNI_valid_dataloader = CNN_Data(self.config['Data_dir'], self.exp_idx, stage='valid', seed=self.seed) # image evaluation
@@ -352,6 +354,7 @@ class FCN_GAN:
 
 
             # get gradient for G network and FCN from AD_loss
+            patch += self.netG(patch)
             pred = self.fcn.model(patch)
             AD_loss = self.fcn.criterion(pred, AD_label)
 
@@ -425,7 +428,6 @@ class FCN_GAN:
                 self.gen_output_image(output, epoch, str(j), dir = './output_test/')
                 # self.gen_output_image(output, epoch, Data_list[j], dir = './output_test/')
 
-
     def image_quality(self, img):
         img = matlab.double(img.tolist())
         vals = ['niqe', self.eng.niqe(img), 'piqe', self.eng.piqe(img), 'brisque', self.eng.brisque(img)]
@@ -475,10 +477,12 @@ class FCN_GAN:
             self.fcn.model.load_state_dict(torch.load('{}fcn_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch)))
         self.fcn.test_and_generate_DPMs(stages=stages)
 
-    def eval_iqa_orig(self, metrics=['brisque', 'niqe', 'piqe'], names=['valid', 'test', 'NACC', 'AIBL']):
+    def eval_iqa_orig(self, metrics=['brisque', 'niqe', 'piqe', 'ssim'], names=['valid', 'test', 'NACC', 'AIBL']):
         self.iqa_log = open(self.iqa_name, 'w')
         self.iqa_log.close()
         for m in metrics:
+            if m == 'ssim':
+                continue
             for dataset, name in zip([self.ADNI_valid_dataloader, self.ADNI_test_dataloader, self.NACC_dataloader, self.AIBL_dataloader], names):
                 iqa_oris = []
                 for input, _ in dataset:
@@ -486,11 +490,25 @@ class FCN_GAN:
                     iqa_oris += [iqa_tensor(input, self.eng, '', m, '')]
                 iqa_oris = np.asarray(iqa_oris)
                 self.iqa_hash[m][name] = iqa_oris
+        if 'ssim' in metrics:
+            ssim_oris = []
+            for data_lo, data_hi, _ in self.gan_valid_dataloader: # batchsize=1
+                ssim_oris.append(SSIM(data_lo.data.squeeze().numpy(), data_hi.data.squeeze().numpy()))
+            ssim_oris = np.array(ssim_oris)
+            self.iqa_hash['ssim']['valid'] = ssim_oris
+            ssim_oris = []
+            for data_lo, data_hi, _ in self.gan_test_dataloader: # batchsize=1
+                ssim_oris.append(SSIM(data_lo.data.squeeze().numpy(), data_hi.data.squeeze().numpy()))
+            ssim_oris = np.array(ssim_oris)
+            self.iqa_hash['ssim']['test'] = ssim_oris
+            self.iqa_hash['ssim']['NACC'], self.iqa_hash['ssim']['AIBL'] = np.zeros(1),  np.zeros(1)
 
-    def eval_iqa_gene(self, metrics=['brisque', 'niqe', 'piqe'], names=['test', 'NACC', 'AIBL']):
+    def eval_iqa_gene(self, metrics=['brisque', 'niqe', 'piqe', 'ssim'], names=['test', 'NACC', 'AIBL']):
         iqa_table = collections.defaultdict(dict)
         table = {'valid': self.ADNI_valid_geneloader, 'test': self.ADNI_test_geneloader, 'NACC': self.NACC_geneloader, 'AIBL': self.AIBL_geneloader}
         for m in metrics:
+            if m == 'ssim':
+                continue
             for name in names:
                 dataset = table[name]
                 iqa_gene = []
@@ -501,6 +519,25 @@ class FCN_GAN:
                 p_va = p_val(self.iqa_hash[m][name], iqa_gene)
                 iqa_table[name][m] = ['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash[m][name]), np.std(self.iqa_hash[m][name])),
                                       '{0:.4f}+/-{1:.4f}'.format(np.mean(iqa_gene), np.std(iqa_gene)), str(p_va)]
+
+        if 'ssim' in metrics:
+            ssim_gene = []
+            for data_lo, data_hi, _ in self.gan_valid_dataloader: # batchsize=1
+                data_lo += self.netG(data_lo.cuda())
+                ssim_gene.append(SSIM(data_lo.data.squeeze().cpu().numpy(), data_hi.data.squeeze().numpy()))
+            ssim_gene = np.array(ssim_gene)
+            p_va = p_val(self.iqa_hash['ssim']['valid'], ssim_gene)
+            iqa_table['ssim']['valid'] = ['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash['ssim']['valid']), np.std(self.iqa_hash['ssim']['valid'])),
+                                          '{0:.4f}+/-{1:.4f}'.format(np.mean(ssim_gene), np.std(ssim_gene)), str(p_va)]
+            ssim_gene = []
+            for data_lo, data_hi, _ in self.gan_test_dataloader: # batchsize=1
+                ssim_gene.append(SSIM(data_lo.data.squeeze().cpu().numpy(), data_hi.data.squeeze().numpy()))
+            ssim_gene = np.array(ssim_gene)
+            p_va = p_val(self.iqa_hash['ssim']['test'], ssim_gene)
+            iqa_table['ssim']['test'] = ['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash['ssim']['test']), np.std(self.iqa_hash['ssim']['test'])),
+                                         '{0:.4f}+/-{1:.4f}'.format(np.mean(ssim_gene), np.std(ssim_gene)), str(p_va)]
+            iqa_table['ssim']['NACC'], iqa_table['ssim']['AIBL'] = ['NA', 'NA', 'NA'],  ['NA', 'NA', 'NA']
+
         with open(self.iqa_name, 'a') as f:
             for m in metrics:
                 f.write(m + ' image quality comparison' + '\n')
@@ -531,7 +568,7 @@ class FCN_GAN:
         for epoch in range(self.save_every_epoch, self.config['epochs'], self.save_every_epoch):
             self.generate(dataset_name=['ADNI'], epoch=epoch)
             self.generate_DPMs(epoch=epoch, stages=['train', 'valid'])
-            self.eval_iqa_gene(metrics=['brisque', 'niqe', 'piqe'], names=['valid'])
+            self.eval_iqa_gene(metrics=['brisque', 'niqe', 'piqe', 'ssim'], names=['valid'])
             self.mlp_main()
             roc_plot_perfrom_table(self.iqa_name)
 
