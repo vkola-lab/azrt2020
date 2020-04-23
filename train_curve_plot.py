@@ -29,13 +29,17 @@ def train_plot(iqa_ori):
             if 'validation accuracy' in line:
                 log.append(float(line.strip('\n').replace('validation accuracy ', '')))
 
-    for i, epoch in enumerate(range(0, 6000, 30)):
+    for i, epoch in enumerate(range(0, 5555, 30)):
         METRIC[epoch].append(log[i])
 
     METRIC = sorted(METRIC.items())
     x, y = zip(*METRIC)
+    # print(y)
     # print(np.array(y))
     x, y = np.asarray(x), np.asarray(y)
+    print(np.argmax(y[:, 3]))
+    print(np.max(y[:, 3]))
+
     # print(type(y), y.shape)
     plt.subplot(2, 2, 1)
     plt.plot(x, y[:, 0], label='niqe')

@@ -97,7 +97,7 @@ def get_roc_info(y_list, y_score_list):
             'auc_mean': auc_mean,
             'auc_std': auc_std}
 
-    return rslt
+    return rslt, aucs
 
 
 def get_pr_info(y_list, y_score_list):
@@ -126,7 +126,7 @@ def get_pr_info(y_list, y_score_list):
             'auc_mean': aps_mean,
             'auc_std': aps_std}
 
-    return rslt
+    return rslt, aps
 
 
 def calc_neurologist_statistics(y, y_pred_list):

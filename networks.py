@@ -186,7 +186,9 @@ class FCN_Wrapper(CNN_Wrapper):
             self.train_dataloader = DataLoader(train_data, batch_size=batch_size, shuffle=True, drop_last=True)
         self.valid_dataloader = FCN_Data(Data_dir, self.exp_idx, stage='valid_patch', seed=self.seed, patch_size=self.patch_size)
 
-    def test_and_generate_DPMs(self, stages=['train', 'valid', 'test', 'AIBL', 'NACC']):
+    def test_and_generate_DPMs(self, epoch=None, stages=['train', 'valid', 'test', 'AIBL', 'NACC']):
+        if epoch:
+            self.model.load_state_dict(torch.load('{}fcn_{}.pth'.format(self.checkpoint_dir, epoch)))
         print('testing and generating DPMs ... ')
         self.fcn = self.model.dense_to_conv()
         self.fcn.train(False)
@@ -289,6 +291,8 @@ class FCN_GAN:
 
     def train(self):
         self.eval_iqa_orig()
+        if os.path.isdir('./output/'):
+            shutil.rmtree('./output/')
         self.log = open(self.log_name, 'w')
         self.log.close()
         self.G_lr, self.D_lr = self.config["G_lr"], self.config["D_lr"]
@@ -346,7 +350,7 @@ class FCN_GAN:
             Glabel = label.fill_(1).cuda()
             loss_G_GAN = self.criterion(Goutput, Glabel)
             # get gradient for G network with L1 norm between real and fake
-            loss_G_dif = torch.mean(torch.abs(Mask))
+            # loss_G_dif = torch.mean(torch.abs(Mask))
 
             # added difference between 1.5T* and 3T
             loss_G_3 = torch.mean(torch.abs(Output-patch_hi))
@@ -354,14 +358,16 @@ class FCN_GAN:
 
 
             # get gradient for G network and FCN from AD_loss
-            patch += self.netG(patch)
-            pred = self.fcn.model(patch)
+            Mask_ad = self.netG(patch)
+            pred = self.fcn.model(patch+Mask_ad)
             AD_loss = self.fcn.criterion(pred, AD_label)
 
             if warmup_G:
-                loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_3
+                loss_G = loss_G_3
+                # loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_3
             else:
-                loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_GAN + self.config["L1_norm_factor"] * AD_loss + loss_G_3
+                loss_G = loss_G_GAN + self.config["L1_norm_factor"] * AD_loss + loss_G_3
+                # loss_G = self.config["L1_norm_factor"] * loss_G_dif + loss_G_GAN + self.config["L1_norm_factor"] * AD_loss + loss_G_3
             loss_G.backward()
 
             self.fcn.optimizer.step()
@@ -370,16 +376,19 @@ class FCN_GAN:
                 self.optimizer_G.step()
 
             if self.epoch % self.save_every_epoch == 0 or (self.epoch % self.save_every_epoch == 0 and self.epoch > self.config["warm_D_epoch"]):
+
+                out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f loss_fcn: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n' %
+                    (self.epoch, self.config['epochs'], idx, len(self.gan_train_dataloader), Routput.data.cpu().mean(),
+                    Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_3.cpu().sum().item(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
+                # out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G_3: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n' %
+                #     (self.epoch, self.config['epochs'], idx, len(self.gan_train_dataloader), Routput.data.cpu().mean(),
+                #     Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G_3.cpu().sum().item(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
+
                 with open(self.log_name, 'a') as f:
-                    out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G_3: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n'
-                          % (self.epoch, self.config['epochs'], idx, len(self.gan_train_dataloader), Routput.data.cpu().mean(),
-                             Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G_3.cpu().sum().item(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
                     f.write(out)
-                print('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G_3: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f'
-                      % (self.epoch, self.config['epochs'], idx, len(self.gan_train_dataloader), Routput.data.cpu().mean(),
-                         Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G_3.cpu().sum().item(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
+                print(out, end='')
                 if loss_G < 0:
-                    print(loss_G, loss_G_3, loss_G_dif, loss_G_GAN)
+                    print(loss_G, loss_G_3, loss_G_GAN)
 
     def valid_model_epoch(self):
         # forward 5 representative patches into netG and then fcn to get accuracy on validation set
@@ -390,43 +399,79 @@ class FCN_GAN:
             for idx, (patches, labels) in enumerate(self.AD_valid_dataloader):
                 patches, labels = patches.cuda(), labels.cuda()
                 patches = self.netG(patches) + patches
-                if idx == 0:
-                    self.gen_output_image(patches, self.epoch)
+                # if idx == 0:
+                    # self.gen_output_image(patches, self.epoch)
                 preds = self.fcn.model(patches)
                 valid_matrix = matrix_sum(valid_matrix, get_confusion_matrix(preds, labels))
         return get_accu(valid_matrix)
 
-    def gen_output_image(self, tensor, epoch, pname=None, dir='./output/'):
-        tensor = tensor.data.cpu().numpy()
-        if not os.path.exists(dir):
-            os.mkdir(dir)
-        plt.imshow(tensor[0, 0, :, 100, :], cmap='gray', vmin=-1, vmax=2.5)
-        name = '#'.join(self.image_quality(tensor[0, 0, :, 100, :]))
-        if pname:
-            plt.savefig(dir+pname+'{}#{}.png'.format(epoch, name))
-        else:
-            plt.savefig(dir+'{}#{}.png'.format(epoch, name))
+    def gen_output_image(self, img1, img2, img3, name, out_dir='./output_eval_/'):
 
-    def sample(self, epoch=None):
+        def bold_axs_stick(axs, fontsize):
+            for tick in axs.xaxis.get_major_ticks():
+                tick.label1.set_fontsize(fontsize)
+                tick.label1.set_fontweight('bold')
+            for tick in axs.yaxis.get_major_ticks():
+                tick.label1.set_fontsize(fontsize)
+                tick.label1.set_fontweight('bold')
+
+        img15 = img1.data.numpy().squeeze()
+        imgp = img2.data.numpy().squeeze()
+        img3 = img3.data.numpy().squeeze()
+
+        plt.set_cmap("gray")
+        plt.subplots_adjust(wspace=0.3, hspace=0.3)
+        fig, axs = plt.subplots(3, 3, figsize=(20, 15))
+
+        axs[0, 0].imshow(img15[:, :, 105].T, vmin=-1, vmax=2.5)
+        axs[0, 0].set_title('1.5T', fontsize=25)
+        axs[0, 0].axis('off')
+        axs[1, 0].imshow(img3[:, :, 105].T, vmin=-1, vmax=2.5)
+        axs[1, 0].set_title('3T', fontsize=25)
+        axs[1, 0].axis('off')
+        axs[2, 0].imshow(imgp[:, :, 105].T, vmin=-1, vmax=2.5)
+        axs[2, 0].set_title('1.5T+', fontsize=25)
+        axs[2, 0].axis('off')
+
+        axs[0, 1].imshow(img15[side_a:side_b, side_a:side_b, 105].T, vmin=-1, vmax=2.5)
+        axs[0, 1].set_title('1.5T', fontsize=25)
+        axs[0, 1].axis('off')
+        axs[1, 1].imshow(img3[side_a:side_b, side_a:side_b, 105].T, vmin=-1, vmax=2.5)
+        axs[1, 1].set_title('3T', fontsize=25)
+        axs[1, 1].axis('off')
+        axs[2, 1].imshow(imgp[side_a:side_b, side_a:side_b, 105].T, vmin=-1, vmax=2.5)
+        axs[2, 1].set_title('1.5T+ zoom in', fontsize=25)
+        axs[2, 1].axis('off')
+
+        axs[0, 2].hist(img15[side_a:side_b, side_a:side_b, 105].T.flatten(), bins=50, range=(0, 1.8))
+        bold_axs_stick(axs[0, 2], 16)
+        axs[0, 2].set_xticks([0, 0.5, 1, 1.5])
+        axs[0, 2].set_yticks([0, 100, 200, 300])
+        axs[0, 2].set_title('1.5T voxel histogram', fontsize=25)
+        axs[1, 2].hist(img3[side_a:side_b, side_a:side_b, 105].T.flatten(), bins=50, range=(0, 1.8))
+        bold_axs_stick(axs[1, 2], 16)
+        axs[1, 2].set_xticks([0, 0.5, 1, 1.5])
+        axs[1, 2].set_yticks([0, 100, 200, 300])
+        axs[1, 2].set_title('3T voxel histogram', fontsize=25)
+        axs[2, 2].hist(imgp[side_a:side_b, side_a:side_b, 105].T.flatten(), bins=50, range=(0, 1.8))
+        bold_axs_stick(axs[1, 2], 16)
+        axs[2, 2].set_xticks([0, 0.5, 1, 1.5])
+        axs[2, 2].set_yticks([0, 100, 200, 300])
+        axs[2, 2].set_title('1.5T+ voxel histogram', fontsize=25)
+        plt.savefig(out_dir + '{}.png'.format(name), dpi=150)
+        plt.close()
+
+    def plot_MRI(self, epoch=None):
         if epoch:
             self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, epoch)))
         else:
             self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch)))
-
-        # print('generating now')
-        # d = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='all')
-        # Data_list = d.Data_list_lo
-        # dataloader = DataLoader(d, batch_size=1, shuffle=False)
-        dataloader = self.ADNI_valid_dataloader
+        dataloader = self.gan_test_dataloader
         with torch.no_grad():
             self.netG.train(False)
-            # for j, (input_lo, input_hi, _) in enumerate(dataloader):
-            for j, item in enumerate(dataloader):
-                # print(j, item)
-                # output = input.cuda() + self.netG(input.cuda())
-                output = torch.tensor(input).cuda() + self.netG(torch.tensor(input).cuda())
-                self.gen_output_image(output, epoch, str(j), dir = './output_test/')
-                # self.gen_output_image(output, epoch, Data_list[j], dir = './output_test/')
+            for j, (data_lo, data_hi, _) in enumerate(dataloader):
+                data_mi = data_lo + self.netG(data_lo.cuda()).cpu()
+                self.gen_output_image(data_lo, data_mi, data_hi, j)
 
     def image_quality(self, img):
         img = matlab.double(img.tolist())
@@ -477,7 +522,24 @@ class FCN_GAN:
             self.fcn.model.load_state_dict(torch.load('{}fcn_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch)))
         self.fcn.test_and_generate_DPMs(stages=stages)
 
-    def eval_iqa_orig(self, metrics=['brisque', 'niqe', 'piqe', 'ssim'], names=['valid', 'test', 'NACC', 'AIBL']):
+    def eval_153(self, metrics=['CNR', 'SNR', 'brisque', 'niqe', 'piqe']):
+        d = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='all')
+        # print(len(d))
+        for m in metrics:
+            iqa_oris_lo, iqa_oris_hi = [], []
+            for data_lo, data_hi, _ in d: # batchsize=1
+                iqa_oris_lo += [iqa_tensor(data_lo.squeeze(), self.eng, '', m, '')]
+                iqa_oris_hi += [iqa_tensor(data_hi.squeeze(), self.eng, '', m, '')]
+            iqa_oris_lo = np.asarray(iqa_oris_lo)
+            self.iqa_hash[m]['1.5T'] = iqa_oris_lo
+            iqa_oris_hi = np.asarray(iqa_oris_hi)
+            self.iqa_hash[m]['3T'] = iqa_oris_hi
+            p_va = p_val(self.iqa_hash[m]['1.5T'], self.iqa_hash[m]['3T'])
+            print(['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash[m]['1.5T']), np.std(self.iqa_hash[m]['1.5T'])),
+                   '{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash[m]['3T']), np.std(self.iqa_hash[m]['3T'])),
+                   str(p_va), m])
+
+    def eval_iqa_orig(self, metrics=['CNR', 'SNR', 'brisque', 'niqe', 'piqe', 'ssim'], names=['valid', 'test', 'NACC', 'AIBL']):
         self.iqa_log = open(self.iqa_name, 'w')
         self.iqa_log.close()
         for m in metrics:
@@ -503,7 +565,9 @@ class FCN_GAN:
             self.iqa_hash['ssim']['test'] = ssim_oris
             self.iqa_hash['ssim']['NACC'], self.iqa_hash['ssim']['AIBL'] = np.zeros(1),  np.zeros(1)
 
-    def eval_iqa_gene(self, metrics=['brisque', 'niqe', 'piqe', 'ssim'], names=['test', 'NACC', 'AIBL']):
+    def eval_iqa_gene(self, metrics=['CNR', 'SNR', 'brisque', 'niqe', 'piqe', 'ssim'], names=['valid', 'test', 'NACC', 'AIBL'], epoch=None):
+        if epoch:
+            self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, epoch)))
         iqa_table = collections.defaultdict(dict)
         table = {'valid': self.ADNI_valid_geneloader, 'test': self.ADNI_test_geneloader, 'NACC': self.NACC_geneloader, 'AIBL': self.AIBL_geneloader}
         for m in metrics:
@@ -519,24 +583,25 @@ class FCN_GAN:
                 p_va = p_val(self.iqa_hash[m][name], iqa_gene)
                 iqa_table[name][m] = ['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash[m][name]), np.std(self.iqa_hash[m][name])),
                                       '{0:.4f}+/-{1:.4f}'.format(np.mean(iqa_gene), np.std(iqa_gene)), str(p_va)]
-
+        self.netG.train(False)
         if 'ssim' in metrics:
             ssim_gene = []
             for data_lo, data_hi, _ in self.gan_valid_dataloader: # batchsize=1
-                data_lo += self.netG(data_lo.cuda())
+                data_lo += self.netG(data_lo.cuda()).cpu()
                 ssim_gene.append(SSIM(data_lo.data.squeeze().cpu().numpy(), data_hi.data.squeeze().numpy()))
             ssim_gene = np.array(ssim_gene)
             p_va = p_val(self.iqa_hash['ssim']['valid'], ssim_gene)
-            iqa_table['ssim']['valid'] = ['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash['ssim']['valid']), np.std(self.iqa_hash['ssim']['valid'])),
+            iqa_table['valid']['ssim'] = ['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash['ssim']['valid']), np.std(self.iqa_hash['ssim']['valid'])),
                                           '{0:.4f}+/-{1:.4f}'.format(np.mean(ssim_gene), np.std(ssim_gene)), str(p_va)]
             ssim_gene = []
             for data_lo, data_hi, _ in self.gan_test_dataloader: # batchsize=1
+                data_lo += self.netG(data_lo.cuda()).cpu()
                 ssim_gene.append(SSIM(data_lo.data.squeeze().cpu().numpy(), data_hi.data.squeeze().numpy()))
             ssim_gene = np.array(ssim_gene)
             p_va = p_val(self.iqa_hash['ssim']['test'], ssim_gene)
-            iqa_table['ssim']['test'] = ['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash['ssim']['test']), np.std(self.iqa_hash['ssim']['test'])),
+            iqa_table['test']['ssim'] = ['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash['ssim']['test']), np.std(self.iqa_hash['ssim']['test'])),
                                          '{0:.4f}+/-{1:.4f}'.format(np.mean(ssim_gene), np.std(ssim_gene)), str(p_va)]
-            iqa_table['ssim']['NACC'], iqa_table['ssim']['AIBL'] = ['NA', 'NA', 'NA'],  ['NA', 'NA', 'NA']
+            iqa_table['NACC']['ssim'], iqa_table['AIBL']['ssim'] = ['NA', 'NA', 'NA'],  ['NA', 'NA', 'NA']
 
         with open(self.iqa_name, 'a') as f:
             for m in metrics:
@@ -545,7 +610,7 @@ class FCN_GAN:
                 line = tabulate(sub_table, headers=['1.5T', '1.5T*', 'p-val'])
                 f.write(line + '\n')
 
-    def mlp_main(self, exp_time=1, repe_time=5, model_name='mlp_fcn_gan', mode='gan_'):
+    def mlp_main(self, exp_time=1, repe_time=5, model_name='fcn_gan', mode='gan_'):
         mlp_setting = read_json('./cnn_config.json')['mlp']
         for exp_idx in range(exp_time):
             for repe_idx in range(repe_time):
@@ -565,6 +630,7 @@ class FCN_GAN:
                 mlp.test(repe_idx)
 
     def pick_time(self):
+        # self.eval_iqa_orig()        # unnecessary to run multiple times?
         for epoch in range(self.save_every_epoch, self.config['epochs'], self.save_every_epoch):
             self.generate(dataset_name=['ADNI'], epoch=epoch)
             self.generate_DPMs(epoch=epoch, stages=['train', 'valid'])
@@ -667,17 +733,24 @@ class MLP_Wrapper(CNN_Wrapper):
 
 
 if __name__ == "__main__":
-    gan = FCN_GAN('./gan_config_optimal.json', 0, 0)
+    gan = FCN_GAN('./gan_config_optimal.json', 0)
 
     # gan.train()
     # gan.pick_time()
 
-    gan.generate(epoch=1140)
-    gan.generate_DPMs(epoch=1890)
-    gan.mlp_main()
-    roc_plot_perfrom_table(gan.iqa_name)
-    gan.eval_iqa_gene(metrics=['brisque', 'niqe', 'piqe'])
+    # gan.generate(epoch=180)
+    # gan.generate_DPMs(epoch=6240)
+    # gan.mlp_main()
+    # roc_plot_perfrom_table(gan.iqa_name)
 
+    # gan.eval_iqa_orig(metrics=['CNR', 'SNR'])
+    # gan.eval_iqa_gene(metrics=['CNR', 'SNR'], epoch=390)
+    gan.eval_iqa_orig(metrics=['ssim'])
+    gan.eval_iqa_gene(metrics=['ssim'], epoch=390)
+    # gan.eval_iqa_orig()
+    # gan.eval_iqa_gene(epoch=390)
+
+    # gan.eval_153()
 
 """
 fcn-gan pipeline:

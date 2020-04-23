@@ -227,9 +227,9 @@ class GAN_Data(Dataset):
             patch_lo, patch_hi = self.patchsampler.random_sample(data_lo, data_hi)
             return np.expand_dims(patch_lo, axis=0), np.expand_dims(patch_hi, axis=0)
         elif self.stage == 'train_w':
-            return np.expand_dims(data_lo, axis=0), self.Label_list[index]
+            return np.expand_dims(data_lo[:,:,:], axis=0), self.Label_list[index]
         else:
-            return np.expand_dims(data_lo, axis=0), np.expand_dims(data_hi, axis=0), self.Label_list[index]
+            return np.expand_dims(data_lo[:,:,:], axis=0), np.expand_dims(data_hi[:,:,:], axis=0), self.Label_list[index]
 
 
 class MLP_Data(Dataset):

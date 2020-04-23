@@ -16,7 +16,13 @@ import sys
 import time
 from scipy import stats
 from sklearn.metrics import precision_recall_fscore_support
+from scipy.interpolate import interp1d
 
+def signaltonoise(a, axis=0, ddof=0):
+    a = np.asanyarray(a)
+    m = a.mean(axis)
+    sd = a.std(axis=axis, ddof=ddof)
+    return np.where(sd == 0, 0, m/sd)
 
 '''
 ori = [[0.93382353, 0.81742044, 0.80555556, 0.88481675,],
@@ -69,6 +75,11 @@ def iqa_tensor(tensor, eng, filename, metric, target):
         func = eng.niqe
     elif metric == 'piqe':
         func = eng.piqe
+    elif metric == 'CNR':
+        return CNR(tensor)
+    elif metric == 'SNR':
+        return SNR(tensor)
+
 
     for side in range(len(tensor.shape)):
         vals = []
@@ -88,6 +99,43 @@ def iqa_tensor(tensor, eng, filename, metric, target):
     # return np.asarray(out)
     return val_avg
 
+
+def SNR(tensor):
+    # return the signal to noise ratio
+    for slice_idx in [80]:
+        img = tensor[slice_idx, :, :]
+        m = interp1d([np.min(img),np.max(img)],[0,255])
+        img = m(img)
+        val = signaltonoise(img, axis=None)
+    return val
+
+def CNR(tensor):
+    # return the signal to noise ratio
+    for slice_idx in [80]:
+        img = tensor[slice_idx, :, :] #shape 217, 181
+        m = interp1d([np.min(img),np.max(img)],[0,255])
+        img = m(img)
+        roi1, roi2 = img[90:120, 80:110], img[110:140, 110:140]
+        return np.abs(np.mean(roi1) - np.mean(roi2)) / np.sqrt(np.square(np.std(roi1))+np.square(np.std(roi2)))
+
+def SSIM(tensor1, tensor2, zoom=False):
+    ssim_list = []
+    for slice_idx in [80]:
+        if zoom:
+            side_a = slice_idx
+            side_b = slice_idx+60
+            img1, img2 = tensor1[side_a:side_b, side_a:side_b, 105], tensor2[side_a:side_b, side_a:side_b, 105]
+        else:
+            img1, img2 = tensor1[slice_idx, :, :], tensor2[slice_idx, :, :]
+        img1 = img_as_float(img1)
+        img2 = img_as_float(img2)
+        ssim_val = ssim(img1, img2)
+        if ssim_val != ssim_val:
+            print('\n\n Error @ SSIM')
+            sys.exit()
+        ssim_list.append(ssim_val)
+    ssim_avg = sum(ssim_list) / len(ssim_list)
+    return ssim_avg
 
 def immse(tensor1, tensor2, zoom, eng):
     vals = []
@@ -176,25 +224,6 @@ def report(y_true, y_pred):
 def p_val(o, g):
     t, p = stats.ttest_ind(o, g, equal_var = True)
     return p
-
-def SSIM(tensor1, tensor2, zoom=False):
-    ssim_list = []
-    for slice_idx in [50, 80, 110, 140]:
-        if zoom:
-            side_a = slice_idx
-            side_b = slice_idx+60
-            img1, img2 = tensor1[side_a:side_b, side_a:side_b, 105], tensor2[side_a:side_b, side_a:side_b, 105]
-        else:
-            img1, img2 = tensor1[slice_idx, :, :], tensor2[slice_idx, :, :]
-        img1 = img_as_float(img1)
-        img2 = img_as_float(img2)
-        ssim_val = ssim(img1, img2)
-        if ssim_val != ssim_val:
-            print('\n\n Error @ SSIM')
-            sys.exit()
-        ssim_list.append(ssim_val)
-    ssim_avg = sum(ssim_list) / len(ssim_list)
-    return ssim_avg
 
 def read_json(config_file):
     with open(config_file) as config_buffer:

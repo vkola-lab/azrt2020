@@ -7,7 +7,7 @@
     "D_pth": "",
     "D_fil_num": 17,
     "warm_D_epoch": 20,
-    "epochs": 4000,
+    "epochs": 5555,
     "Data_dir": "/data/datasets/ADNI_NoBack/",
     "L1_norm_factor": 0.1,
     "AD_factor": 0.1,

@@ -6,8 +6,17 @@ from matrix_stat import confusion_matrix, stat_metric
 import collections
 from tabulate import tabulate
 import os
+from matplotlib.patches import Rectangle
+from scipy import stats
+import csv
+import numpy as np
 
-def plot_legend(axes, crv_lgd_hdl, crv_info, neo_lgd_hdl):
+def p_val(o, g):
+    t, p = stats.ttest_ind(o, g, equal_var = False)
+    # print(o, g, p)
+    return p
+
+def plot_legend(axes, crv_lgd_hdl, crv_info, neo_lgd_hdl, set1, set2):
     m_name = list(crv_lgd_hdl.keys())
     ds_name = list(crv_lgd_hdl[m_name[0]].keys())
 
@@ -19,22 +28,26 @@ def plot_legend(axes, crv_lgd_hdl, crv_info, neo_lgd_hdl):
             hdl[ds] += neo_lgd_hdl[ds]
             val[ds] += ['Neurologist', 'Avg. Neurologist']
 
-    convert = {'mlp_fcn':"1.5T", 'mlp_fcn_gan':"1.5T+", 'mlp_fcn_aug':'1.5T Aug'}
+    convert = {'fcn':"1.5T", 'fcn_gan':"1.5T*", 'fcn_aug':'1.5T Aug'}
 
     for ds in ds_name:
         for m in m_name:
+            # print(m, ds)
             hdl[ds].append(crv_lgd_hdl[m][ds])
             val[ds].append('{}: {:.3f}$\pm${:.3f}'.format(convert[m], crv_info[m][ds]['auc_mean'], crv_info[m][ds]['auc_std']))
+        extra = Rectangle((0, 0), 1, 1, fc="w", fill=False, edgecolor='none', linewidth=0)
+        val[ds].append('p-value: {:.4f}'.format(p_val(set1[ds], set2[ds])))
 
-        axes[ds].legend(hdl[ds], val[ds],
+        axes[ds].legend(hdl[ds]+[extra], val[ds],
                         facecolor='w', prop={"weight":'bold', "size":17},  # frameon=False,
                         bbox_to_anchor=(0.04, 0.04, 0.5, 0.5),
                         loc='lower left')
 
-def roc_plot_perfrom_table(txt_file=None, mode=['mlp_fcn', 'mlp_fcn_gan']):
+def roc_plot_perfrom_table(txt_file=None, mode=['fcn', 'fcn_gan']):
     roc_info, pr_info = {}, {}
+    aucs, apss = {}, {}
     for m in mode:
-        roc_info[m], pr_info[m] = {}, {}
+        roc_info[m], pr_info[m], aucs[m], apss[m] = {}, {}, {}, {}
         for ds in ['test', 'AIBL', 'NACC']:
             Scores, Labels = [], []
             for exp_idx in range(1):
@@ -42,15 +55,26 @@ def roc_plot_perfrom_table(txt_file=None, mode=['mlp_fcn', 'mlp_fcn_gan']):
                     labels, scores = read_raw_score('checkpoint_dir/{}_exp{}/raw_score_{}_{}.txt'.format(m, exp_idx, ds, repe_idx))
                     Scores.append(scores)
                     Labels.append(labels)
-            roc_info[m][ds] = get_roc_info(Labels, Scores)
-            pr_info[m][ds] = get_pr_info(Labels, Scores)
+            # scores = np.array(Scores).mean(axis=0)
+            # labels = Labels[0]
+            # filename = '{}_{}_mean'.format(m, ds)
+            # with open(filename+'.csv', 'w') as f1:
+            #     wr = csv.writer(f1)
+            #     wr.writerows([[s] for s in scores])
+            # with open(filename+'_l.csv', 'w') as f2:
+            #     wr = csv.writer(f2)
+            #     wr.writerows([[l] for l in labels])
+            #     # f.write(' '.join(map(str,scores))+'\n'+' '.join(map(str,labels)))
+
+            roc_info[m][ds], aucs[m][ds] = get_roc_info(Labels, Scores)
+            pr_info[m][ds], apss[m][ds] = get_pr_info(Labels, Scores)
 
     plt.style.use('fivethirtyeight')
     plt.rcParams['axes.facecolor'] = 'w'
     plt.rcParams['figure.facecolor'] = 'w'
     plt.rcParams['savefig.facecolor'] = 'w'
 
-    convert = {'mlp_fcn':"1.5T", 'mlp_fcn_gan':"1.5T+", 'mlp_fcn_aug':'1.5T Aug'}
+    convert = {'fcn':"1.5T", 'fcn_gan':"1.5T*", 'fcn_aug':'1.5T Aug'}
 
     # roc plot
     fig, axes_ = plt.subplots(1, 3, figsize=[18, 6], dpi=100)
@@ -65,7 +89,7 @@ def roc_plot_perfrom_table(txt_file=None, mode=['mlp_fcn', 'mlp_fcn_gan']):
                                     **{'color': 'C{}'.format(i), 'hatch': '//////', 'alpha': .4, 'line': lines[j],
                                         'title': title})
 
-    plot_legend(axes=axes, crv_lgd_hdl=hdl_crv, crv_info=roc_info, neo_lgd_hdl=None)
+    plot_legend(axes=axes, crv_lgd_hdl=hdl_crv, crv_info=roc_info, neo_lgd_hdl=None, set1=aucs['fcn'], set2=aucs['fcn_gan'])
     fig.savefig('./plot/roc.png', dpi=300)
 
     # pr plot
@@ -80,7 +104,7 @@ def roc_plot_perfrom_table(txt_file=None, mode=['mlp_fcn', 'mlp_fcn_gan']):
                                     **{'color': 'C{}'.format(i), 'hatch': '//////', 'alpha': .4, 'line': lines[j],
                                         'title': title})
 
-    plot_legend(axes=axes, crv_lgd_hdl=hdl_crv, crv_info=pr_info, neo_lgd_hdl=None)
+    plot_legend(axes=axes, crv_lgd_hdl=hdl_crv, crv_info=pr_info, neo_lgd_hdl=None, set1=apss['fcn'], set2=apss['fcn_gan'])
     fig.savefig('./plot/pr.png', dpi=300)
 
     table = collections.defaultdict(dict)
