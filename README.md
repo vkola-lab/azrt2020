@@ -4,13 +4,13 @@
 
 This repo contains a PyTorch implementation of a deep learning framework that enhance Alzheimer’s disease (AD) classification performance using MRI scans of multiple magnetic field strengths, while also improve the image quality. The framework contains a generative adversarial network (GAN), a fully convolutional networks (FCN), and a multilayer perceptron. See below for the overall structure of our framework.
 
-<img src="plot/structure.png" width="425"/>
+<img src="plot/structure.png" width="695"/>
 
-The modified GAN was developed on ADNI training and validation sets and its performance was evaluated on ADNI testing set and 2 external testing datasets, including NACC and AIBL datasets. See below for the results. [accuracy, image quality, samples, roc curves]
+The modified GAN was developed on ADNI training and validation sets and its performance was evaluated on ADNI testing set and 2 external testing datasets, including NACC and AIBL datasets. See below for the results. [accuracy: table 3, image qualities: table 2, samples: figure 2, roc curves: figure 3]
 
-<img src="plot/accuracy.png" width="425"/>
-<img src="plot/iqs.png" width="425"/>
-<img src="plot/sample.png" width="425"/>
+<img src="plot/accuracy.png" width="695"/>
+<img src="plot/iqs.png" width="695"/>
+<img src="plot/sample.png" width="695"/>
 <img src="plot/roc.png" width="695"/>
 
 Please refer to our paper for more details.
