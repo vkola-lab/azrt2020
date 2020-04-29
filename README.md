@@ -6,14 +6,19 @@ This repo contains a PyTorch implementation of a deep learning framework that en
 
 <img src="plot/structure.png" width="695"/>
 
-The modified GAN was developed on ADNI training and validation sets and its performance was evaluated on ADNI testing set and 2 external testing datasets, including NACC and AIBL datasets. See below for the results. [accuracy: table 3, image qualities: table 2, samples: figure 2, roc curves: figure 3]
+The modified GAN was developed on ADNI training and validation sets and its performance was evaluated on ADNI testing set and 2 external testing datasets, including NACC and AIBL datasets. See below for the results.
 
+Accuracy table:
 <img src="plot/accuracy.png" width="695"/>
+
+Image qualities:
 
 <img src="plot/iqs.png" width="695"/>
 
+Sample output:
 <img src="plot/sample.png" width="695"/>
 
+ROC curves:
 <img src="plot/roc.png" width="695"/>
 
 Please refer to our paper for more details.
