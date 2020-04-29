@@ -42,12 +42,12 @@ data_dir/AIBL/
 
 The tool was developped based on the following packages:
 
-1. PyTorch (1.1 or greater).
-2. NumPy (1.16 or greater).
-3. matplotlib (3.0.3 or greater)
-4. tqdm (4.31 or greater).
-5. matlab
-6. scipy
+1. PyTorch (1.1 or later)
+2. NumPy (1.16 or later)
+3. matplotlib (3.0.3 or later)
+4. tqdm (4.31 or later)
+5. matlab (2018b or later)
+6. scipy (1.4.1 or later)
 
 Please note that the dependencies may require Python 3.6 or greater. It is recommemded to install and maintain all packages by using [`conda`](https://www.anaconda.com/) or [`pip`](https://pypi.org/project/pip/). For the installation of GPU accelerated PyTorch, additional effort may be required. Please check the official websites of [PyTorch](https://pytorch.org/get-started/locally/) and [CUDA](https://developer.nvidia.com/cuda-downloads) for detailed instructions.
 
