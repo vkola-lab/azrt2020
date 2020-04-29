@@ -6,18 +6,11 @@ This repo contains a PyTorch implementation of a deep learning framework that en
 
 <img src="plot/structure.png" width="425"/>
 
-The modified GAN was developed on ADNI training and validation sets and its performance was evaluated on ADNI testing set and 2 external testing datasets, including NACC and AIBL datasets. See below for the results.
+The modified GAN was developed on ADNI training and validation sets and its performance was evaluated on ADNI testing set and 2 external testing datasets, including NACC and AIBL datasets. See below for the results. [accuracy, image quality, samples, roc curves]
 
 <img src="plot/accuracy.png" width="425"/>
 <img src="plot/iqs.png" width="425"/>
 <img src="plot/sample.png" width="425"/>
-
-The MLP makes final global prediction on the diagnosis results. See below
-
-<img src="plot/neuropath.png" width="395"/>
-
-The performance of the final global prediction from MLP model was compared with 11 neurologists. See below our FCN + MLP model roc curve.
-
 <img src="plot/roc.png" width="695"/>
 
 Please refer to our paper for more details.
