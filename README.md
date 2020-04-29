@@ -12,7 +12,6 @@ Accuracy table:
 <img src="plot/accuracy.png" width="695"/>
 
 Image qualities:
-
 <img src="plot/iqs.png" width="695"/>
 
 Sample output:
@@ -140,7 +139,9 @@ python main.py
 Please modify main.py to train and test your own models, where:
 
 'gan_main' corresponding to training & generating phase of the GAN model, where one may choose a specified epoch for the generator & FCN.
+
 'fcn_main' corresponding to training & testing phase of the FCN model.
+
 'mlp_main' corresponding to training & testing phase of the multilayer perceptron model.
 
 Function 'fcn_main' and 'mlp_main' will do number of repeat time independent FCN model training and MLP model on random splitted data. Model performance is thus evaluated on all runs as mean +/- std.
