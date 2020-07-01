@@ -25,6 +25,16 @@ def read_raw_score(txt_file):
             labels.append(int(label))
     return np.array(labels), np.array(scores)
 
+def read_raw_score_anova(txt_file, hashmap, group):
+    labels, scores = [], []
+    with open(txt_file, 'r') as f:
+        for idx, line in enumerate(f):
+            if hashmap[idx] != group: continue
+            nl, ad, label = map(float, line.strip('\n').split('__'))
+            scores.append(softmax(nl, ad))
+            labels.append(int(label))
+    return np.array(labels), np.array(scores)
+
 def pr_interp(rc_, rc, pr):
     pr_ = np.zeros_like(rc_)
     locs = np.searchsorted(rc, rc_)
@@ -150,7 +160,7 @@ def load_neurologist_data(fn):
     rows = rows[1:,4:]
     rows[rows == 'AD'] = 1
     rows[rows == 'NL'] = 0
-    
+
     rslt = {'y': rows[:,0].astype(np.int),
             'y_pred_list': rows[:,1:].T.astype(np.int)}
     return rslt

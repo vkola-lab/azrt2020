@@ -131,9 +131,12 @@ def GAN_test_plot(out_dir, id, img1, output, img3, info):
     plt.close()
 
 def MRI_slice_plot(out_dir, mri_low, mri_high):
-    img15 = np.load(mri_low)
-    img3 = np.load(mri_high)
-    id = mri_low.split('/')[-1][5:15]
+    # img15 = np.load(mri_low)
+    # img3 = np.load(mri_high)
+    img15 = mri_low
+    img3 = mri_high
+    # id = mri_low.split('/')[-1][5:15]
+    id = 'histogram'
     plt.set_cmap("gray")
     plt.subplots_adjust(wspace=0.3, hspace=0.3)
     fig, axs = plt.subplots(2, 3, figsize=(20,12))

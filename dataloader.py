@@ -50,10 +50,15 @@ class Data(Dataset):
     def __init__(self, Data_dir, class1, class2, stage, ratio=(0.6, 0.2, 0.2), seed=1000, shuffle=True):
         random.seed(seed)
         self.Data_dir = Data_dir
-        Data_list0 = read_txt('./lookuptxt/', class1 + '.txt')
-        Data_list1 = read_txt('./lookuptxt/', class2 + '.txt')
-        self.Data_list = Data_list0 + Data_list1
-        self.Label_list = [0]*len(Data_list0) + [1]*len(Data_list1)
+
+        if 'AIBL' in Data_dir:
+            self.Data_list, self.Label_list = read_csv('./lookupcsv/{}.csv'.format('AIBL'))
+            self.Data_list = [d+'.npy' for d in self.Data_list]
+        else:
+            Data_list0 = read_txt('./lookuptxt/', class1 + '.txt')
+            Data_list1 = read_txt('./lookuptxt/', class2 + '.txt')
+            self.Data_list = Data_list0 + Data_list1
+            self.Label_list = [0]*len(Data_list0) + [1]*len(Data_list1)
         self.stage = stage
         self.length = len(self.Data_list)
         idxs = list(range(self.length))
@@ -105,6 +110,9 @@ class CNN_Data(Dataset):
 
     def __len__(self):
         return len(self.Data_list)
+
+    def get_filenames(self):
+        return [i +'.npy' for i in self.Data_list]
 
     def __getitem__(self, idx):
         label = self.Label_list[idx]
@@ -216,6 +224,9 @@ class GAN_Data(Dataset):
         else:
             raise ValueError('invalid stage setting')
 
+    def get_filenames(self):
+        return [self.Data_list_hi[idx] for idx in self.index_list], [self.Data_list_lo[idx] for idx in self.index_list]
+
     def __len__(self):
         return len(self.index_list)
 
@@ -305,8 +316,6 @@ if __name__ == "__main__":
     # sample_weight = dataset.get_sample_weights()
     # sampler = torch.utils.data.sampler.WeightedRandomSampler(sample_weight, len(sample_weight))
     # train_w_dataloader = DataLoader(dataset, batch_size=3, sampler=sampler)
-    # for scan1, scan2, label in train_w_dataloader:
-    #     print(label)
     # for scan1, scan2, label in train_w_dataloader:
     #     print(label)
 

@@ -19,6 +19,8 @@ import numpy as np
 from glob import glob
 import imageio
 import matplotlib.pyplot as plt
+import matplotlib.patches as patches
+from visual import bold_axs_stick
 
 def gan_main():
     # epoch = 5555 for 2000, 3-1-1
@@ -28,8 +30,8 @@ def gan_main():
     # gan.train()
     # gan.generate(epoch=390)
 
-    # gan.load_trained_FCN('./cnn_config.json', exp_idx=0, epoch=3780)
-    # gan.fcn.test_and_generate_DPMs()
+    # gan.generate_DPMs(epoch=3780)
+    # gan.fcn.test_and_generate_DPMs(stages=['AIBL'])
 
     return gan
 
@@ -64,8 +66,8 @@ def fcn_main(repe_time, model_name, augment, fcn_setting):
                         metric          = 'accuracy',
                         augment         = augment)
         fcn.train(epochs = fcn_setting['train_epochs'])
-        # fcn.test_and_generate_DPMs(epoch=1)
         fcn.test_and_generate_DPMs()
+        # fcn.test_and_generate_DPMs(epoch=299, stages=['AIBL'])
         # plot_heatmap('/home/sq/gan2020/DPMs/fcn_exp', 'fcn_heatmap', exp_idx=exp_idx, figsize=(9, 4))
 
 def mlp_main(exp_time, repe_time, model_name, mode, mlp_setting):
@@ -128,11 +130,14 @@ def get_best():
         i+=1
     print(y[:, 1][33])
 
+def kl_divergence(p, q):
+    return np.sum(np.where(p != 0, p * np.log(p / q), 0))
+
 def sample():
     # print('Evaluating IQA results on all datasets:')
     data  = []
     names = ['ADNI', 'NACC', 'AIBL']
-    sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/AIBL_NoBack/"]
+    sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/AIBL_15_NoBack/"]
     data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='test', shuffle=False)]
     data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
     data += [Data(sources[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
@@ -156,66 +161,34 @@ def sample():
         dataloader = dataloaders[id]
         dataloader_p = dataloaders_p[id]
 
-        # if name == 'ADNI':
-        #     gd = GAN_Data("/data/datasets/ADNI_NoBack/", seed=1000, stage='train_p')
-        #     plt.set_cmap("gray")
-        #     plt.subplots_adjust(wspace=0.3, hspace=0.3)
-        #     fig, axs = plt.subplots(1, 4, figsize=(20,15))
-        #     for i, ((input_o, _), (input_p, _)) in enumerate(zip(dataloader, dataloader_p)):
-        #         # print(name, i)
-        #         input_o = np.load(gd.Data_dir + gd.Data_list_lo[i], mmap_mode='r').astype(np.float32)
-        #         input_t = np.load(gd.Data_dir + gd.Data_list_hi[i], mmap_mode='r').astype(np.float32)
-        #         input_p = np.load("./ADNIP_NoBack/" + gd.Data_list_lo[i], mmap_mode='r').astype(np.float32)
-        #         # print(name)
-        #         # imageio.imwrite(out_dir+'/'+name+'P/'+Data_list[i].replace('npy','tif'), input_p[:, 100, :])
-        #         # imageio.imwrite(out_dir+'/'+name+'O/'+Data_list[i].replace('npy','tif'), input[:, 100, :])
-        #         ori = input_o[:, 100, :]
-        #         gen = input_p[:, 100, :]
-        #         tar = input_t[:, 100, :]
-        #         # axs[0, 0].imshow(ori, vmin=-1, vmax=2.5)
-        #         axs[0].imshow(ori, vmin=-1, vmax=2.5)
-        #         axs[0].set_title('1.5T', fontsize=25)
-        #         axs[0].axis('off')
-        #         axs[1].imshow(gen, vmin=-1, vmax=2.5)
-        #         axs[1].set_title('1.5T*', fontsize=25)
-        #         axs[1].axis('off')
-        #         axs[2].imshow(tar, vmin=-1, vmax=2.5)
-        #         axs[2].set_title('3T', fontsize=25)
-        #         axs[2].axis('off')
-        #         axs[3].imshow(gen-ori, vmin=-1, vmax=2.5)
-        #         axs[3].set_title('mask', fontsize=25)
-        #         axs[3].axis('off')
-        #         plt.savefig(out_dir+name+'_train_'+str(i)+'.png', dpi=150)
-        #         plt.cla()
-        #         if i == stop:
-        #             break
-
 
         for i, ((input_o, _), (input_p, _)) in enumerate(zip(dataloader, dataloader_p)):
+
             orig = input_o.squeeze().numpy()
             plus = input_p.squeeze().numpy()
 
             plt.set_cmap("gray")
-            plt.subplots_adjust(wspace=0.1, hspace=0.0)
-            fig, axs = plt.subplots(3, 3, figsize=(20, 15))
+            plt.subplots_adjust(wspace=0.1, hspace=1.0)
+            fig, axs = plt.subplots(3, 5, figsize=(45, 20))
 
-            axs[0, 0].imshow(orig[:, :, 85].T, vmin=-1, vmax=2.5)
+            axs[0, 0].imshow(orig[:, ::-1, 85].T, vmin=-1, vmax=2.5)
             axs[0, 0].set_title('1.5T', fontweight="bold", fontsize=25)
+            axs[0, 0].set_ylabel('Probability', fontweight="bold", fontsize=25)
             axs[0, 0].axis('off')
-            axs[1, 0].imshow(plus[:, :, 85].T, vmin=-1, vmax=2.5)
+            axs[1, 0].imshow(plus[:, ::-1, 85].T, vmin=-1, vmax=2.5)
             axs[1, 0].set_title('1.5T*', fontweight="bold", fontsize=25)
             axs[1, 0].axis('off')
-            axs[2, 0].imshow(orig[:, :, 85].T - plus[:, :, 85].T, vmin=-1, vmax=2.5)
+            axs[2, 0].imshow(orig[:, ::-1, 85].T - plus[:, ::-1, 85].T, vmin=-1, vmax=2.5)
             axs[2, 0].set_title('Mask', fontweight="bold", fontsize=25)
             axs[2, 0].axis('off')
 
             axs[0, 1].imshow(np.rot90(orig[100, :, :]), vmin=-1, vmax=2.5)
             axs[0, 1].set_title('1.5T', fontweight="bold", fontsize=25)
             axs[0, 1].axis('off')
-            im=axs[1, 1].imshow(np.rot90(plus[100, :, :]), vmin=-1, vmax=2.5)
+            im = axs[1, 1].imshow(np.rot90(plus[100, :, :]), vmin=-1, vmax=2.5)
             axs[1, 1].set_title('1.5T*', fontweight="bold", fontsize=25)
             axs[1, 1].axis('off')
-            axs[2, 1].imshow(np.rot90(orig[100, :, :]-plus[100, :, :]), vmin=-1, vmax=2.5)
+            axs[2, 1].imshow(np.rot90(orig[100, :, :] - plus[100, :, :]), vmin=-1, vmax=2.5)
             axs[2, 1].set_title('Mask', fontweight="bold", fontsize=25)
             axs[2, 1].axis('off')
 
@@ -229,26 +202,179 @@ def sample():
             axs[2, 2].set_title('Mask', fontweight="bold", fontsize=25)
             axs[2, 2].axis('off')
 
+            # Create a Rectangle patch
+            rect = patches.Rectangle((80, 61), 40, 40, linewidth=1, edgecolor='r', facecolor='none')
+            # Add the patch to the Axes
+            axs[0, 2].add_patch(rect)
+            rect = patches.Rectangle((80, 61), 40, 40, linewidth=1, edgecolor='r', facecolor='none')
+            axs[1, 2].add_patch(rect)
+            rect = patches.Rectangle((80, 61), 40, 40, linewidth=1, edgecolor='r', facecolor='none')
+            axs[2, 2].add_patch(rect)
+
+            # zoommed in
+            axs[0, 3].imshow(np.rot90(orig[80:120, 100, 80:120]), vmin=-1, vmax=2.5)
+            axs[0, 3].set_title('1.5T zoomed', fontweight="bold", fontsize=25)
+            axs[0, 3].axis('off')
+            axs[1, 3].imshow(np.rot90(plus[80:120, 100, 80:120]), vmin=-1, vmax=2.5)
+            axs[1, 3].set_title('1.5T* zoomed', fontweight="bold", fontsize=25)
+            axs[1, 3].axis('off')
+            axs[2, 3].imshow(np.rot90(orig[80:120, 100, 80:120] - plus[80:120, 100, 80:120]), vmin=-1, vmax=2.5)
+            axs[2, 3].set_title('Mask zoomed', fontweight="bold", fontsize=25)
+            axs[2, 3].axis('off')
+
+            axs[0, 4].hist(np.rot90(orig[80:120, 100, 80:120]).flatten(), bins=50, range=(0, 1.8))
+            bold_axs_stick(axs[0, 4], 16)
+            axs[0, 4].set_xticks([0, 0.5, 1, 1.5])
+            axs[0, 4].set_yticks([0, 20, 40, 60])
+            axs[0, 4].set_title('1.5T voxel histogram', fontweight="bold", fontsize=25)
+            # axs[0, 4].set_xlabel('Voxel value', fontsize=25, fontweight='bold')
+            axs[0, 4].set_ylabel('Count', fontsize=25, fontweight='bold')
+
+            axs[1, 4].hist(np.rot90(plus[80:120, 100, 80:120]).flatten(), bins=50, range=(0, 1.8))
+            bold_axs_stick(axs[1, 4], 16)
+            axs[1, 4].set_xticks([0, 0.5, 1, 1.5])
+            axs[1, 4].set_yticks([0, 20, 40, 60])
+            axs[1, 4].set_title('1.5T* voxel histogram', fontweight="bold", fontsize=25)
+            # axs[1, 4].set_xlabel('Voxel value', fontsize=25, fontweight='bold')
+            axs[1, 4].set_ylabel('Count', fontsize=25, fontweight='bold')
+
+            axs[2, 4].hist(np.rot90(orig[80:120, 100, 80:120]-plus[80:120, 100, 80:120]).flatten(), bins=50, range=(0, 1.8))
+            bold_axs_stick(axs[2, 4], 16)
+            axs[2, 4].set_xticks([0, 0.5, 1, 1.5])
+            axs[2, 4].set_yticks([0, 50, 100, 150])
+            axs[2, 4].set_title('Mask voxel histogram', fontweight="bold", fontsize=25)
+            axs[2, 4].set_xlabel('Voxel value', fontsize=25, fontweight='bold')
+            axs[2, 4].set_ylabel('Count', fontsize=25, fontweight='bold')
+
+            p, _ = np.histogram(np.rot90(orig[80:120, 100, 80:120]).flatten(), bins=20, range=(-1, 2.5), density=True)
+            q, _ = np.histogram(np.rot90(plus[80:120, 100, 80:120]).flatten(), bins=20, range=(-1, 2.5), density=True)
+            p = np.where(p != 0, p, 1)
+            q = np.where(q != 0, q, 1)
+            print('kl value:', kl_divergence(p, q))
+
             cbar = fig.colorbar(im, ax=axs.ravel().tolist())
             for l in cbar.ax.yaxis.get_ticklabels():
                 l.set_weight("bold")
                 l.set_fontsize(25)
 
-            plt.savefig(out_dir+name+str(i)+'.png', dpi=150)
+            plt.savefig(out_dir + name + str(i) + '.png', dpi=300)
             plt.close()
+
+            sys.exit()
+
+            # orig = input_o.squeeze().numpy()
+            # plus = input_p.squeeze().numpy()
+            #
+            # plt.set_cmap("gray")
+            # plt.subplots_adjust(wspace=0.1, hspace=0.0)
+            # fig, axs = plt.subplots(3, 4, figsize=(20, 15))
+            #
+            # axs[0, 0].imshow(orig[:, ::-1, 85].T, vmin=-1, vmax=2.5)
+            # axs[0, 0].set_title('1.5T', fontweight="bold", fontsize=25)
+            # axs[0, 0].set_ylabel('Probability', fontweight="bold", fontsize=25)
+            # axs[0, 0].axis('off')
+            # axs[1, 0].imshow(plus[:, ::-1, 85].T, vmin=-1, vmax=2.5)
+            # axs[1, 0].set_title('1.5T*', fontweight="bold", fontsize=25)
+            # axs[1, 0].axis('off')
+            # axs[2, 0].imshow(orig[:, ::-1, 85].T - plus[:, ::-1, 85].T, vmin=-1, vmax=2.5)
+            # axs[2, 0].set_title('Mask', fontweight="bold", fontsize=25)
+            # axs[2, 0].axis('off')
+            #
+            # axs[0, 1].imshow(np.rot90(orig[100, :, :]), vmin=-1, vmax=2.5)
+            # axs[0, 1].set_title('1.5T', fontweight="bold", fontsize=25)
+            # axs[0, 1].axis('off')
+            # im=axs[1, 1].imshow(np.rot90(plus[100, :, :]), vmin=-1, vmax=2.5)
+            # axs[1, 1].set_title('1.5T*', fontweight="bold", fontsize=25)
+            # axs[1, 1].axis('off')
+            # axs[2, 1].imshow(np.rot90(orig[100, :, :]-plus[100, :, :]), vmin=-1, vmax=2.5)
+            # axs[2, 1].set_title('Mask', fontweight="bold", fontsize=25)
+            # axs[2, 1].axis('off')
+            #
+            # axs[0, 2].imshow(np.rot90(orig[:, 100, :]), vmin=-1, vmax=2.5)
+            # axs[0, 2].set_title('1.5T', fontweight="bold", fontsize=25)
+            # axs[0, 2].axis('off')
+            # axs[1, 2].imshow(np.rot90(plus[:, 100, :]), vmin=-1, vmax=2.5)
+            # axs[1, 2].set_title('1.5T*', fontweight="bold", fontsize=25)
+            # axs[1, 2].axis('off')
+            # axs[2, 2].imshow(np.rot90(orig[:, 100, :] - plus[:, 100, :]), vmin=-1, vmax=2.5)
+            # axs[2, 2].set_title('Mask', fontweight="bold", fontsize=25)
+            # axs[2, 2].axis('off')
+            #
+            # # Create a Rectangle patch
+            # rect = patches.Rectangle((80, 61), 40, 40, linewidth=1,edgecolor='r',facecolor='none')
+            # # Add the patch to the Axes
+            # axs[0, 2].add_patch(rect)
+            # rect = patches.Rectangle((80, 61), 40, 40, linewidth=1,edgecolor='r',facecolor='none')
+            # axs[1, 2].add_patch(rect)
+            # rect = patches.Rectangle((80, 61), 40, 40, linewidth=1,edgecolor='r',facecolor='none')
+            # axs[2, 2].add_patch(rect)
+            #
+            # # zoommed in
+            # axs[0, 3].imshow(np.rot90(orig[80:120, 100, 80:120]), vmin=-1, vmax=2.5)
+            # axs[0, 3].set_title('1.5T zoomed', fontweight="bold", fontsize=25)
+            # axs[0, 3].axis('off')
+            # axs[1, 3].imshow(np.rot90(plus[80:120, 100, 80:120]), vmin=-1, vmax=2.5)
+            # axs[1, 3].set_title('1.5T* zoomed', fontweight="bold", fontsize=25)
+            # axs[1, 3].axis('off')
+            # axs[2, 3].imshow(np.rot90(orig[80:120, 100, 80:120] - plus[80:120, 100, 80:120]), vmin=-1, vmax=2.5)
+            # axs[2, 3].set_title('Mask zoomed', fontweight="bold", fontsize=25)
+            # axs[2, 3].axis('off')
+            #
+            # cbar = fig.colorbar(im, ax=axs.ravel().tolist())
+            # for l in cbar.ax.yaxis.get_ticklabels():
+            #     l.set_weight("bold")
+            #     l.set_fontsize(25)
+            #
+            # plt.savefig(out_dir+name+str(i)+'.png', dpi=150)
+            # plt.close()
+            #
+            # plt.set_cmap("gray")
+            # plt.subplots_adjust(wspace=0.3, hspace=0.6)
+            # fig, axs = plt.subplots(3, 1, figsize=(8,23))
+            #
+            # axs[0].hist(np.rot90(orig[80:120, 100, 80:120]).flatten(), bins=50, range=(0, 1.8))
+            # bold_axs_stick(axs[0], 16)
+            # axs[0].set_xticks([0, 0.5, 1, 1.5])
+            # axs[0].set_yticks([0, 20, 40, 60])
+            # axs[0].set_title('1.5T voxel histogram', fontweight="bold", fontsize=25)
+            # axs[1].hist(np.rot90(plus[80:120, 100, 80:120]).flatten(), bins=50, range=(0, 1.8))
+            # bold_axs_stick(axs[1], 16)
+            # axs[1].set_xticks([0, 0.5, 1, 1.5])
+            # axs[1].set_yticks([0, 20, 40, 60])
+            # axs[1].set_title('1.5T* voxel histogram', fontweight="bold", fontsize=25)
+            # # plt.ylabel('xlabel', fontweight="bold", fontsize=25)
+            # axs[2].hist(np.rot90(orig[80:120, 100, 80:120]).flatten() - np.rot90(plus[80:120, 100, 80:120]).flatten(), bins=50, range=(0, 1.8))
+            # bold_axs_stick(axs[1], 16)
+            # axs[2].set_xticks([0, 0.5, 1, 1.5])
+            # axs[2].set_yticks([0, 50, 100, 150])
+            # bold_axs_stick(axs[2], 16)
+            # axs[2].set_title('Mask voxel histogram', fontweight="bold", fontsize=25)
+            # axs[0].set_xlabel('Voxel value', fontsize=25, fontweight='bold')
+            # axs[0].set_ylabel('Count', fontsize=25, fontweight='bold')
+            # axs[1].set_xlabel('Voxel value', fontsize=25, fontweight='bold')
+            # axs[1].set_ylabel('Count', fontsize=25, fontweight='bold')
+            # axs[2].set_xlabel('Voxel value', fontsize=25, fontweight='bold')
+            # axs[2].set_ylabel('Count', fontsize=25, fontweight='bold')
+            #
+            # plt.savefig(out_dir+name+'_hist_'+str(i)+'.png', dpi=150)
+            #
+            # sys.exit()
 
 
 if __name__ == "__main__":
 
-    # cnn_config = read_json('./cnn_config.json')
+    cnn_config = read_json('./cnn_config.json')
     # fcn_main(1, 'fcn', False, cnn_config['fcn'])
     # fcn_main(5, 'fcn', False, cnn_config['fcn'])
-    # mlp_main(1, 5, 'fcn', '', cnn_config['mlp']) # train 5 mlp models with random seeds on generated DPMs from FCN-GAN
+    # mlp_main(5, 25, 'fcn_mlp', '', cnn_config['mlp']) # train 5 mlp models with random seeds on generated DPMs from FCN-GAN
+    # print('stage1')
 
-    # gan = gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
-    # mlp_main(1, 5, 'fcn_gan', 'gan_', cnn_config['mlp'])
-    # gan.eval_iqa_orig()
-    # gan.eval_iqa_gene(epoch=390)
+    #gan = gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
+    # print('stage2')
+    # mlp_main(1, 25, 'fcn_gan_mlp', 'gan_', cnn_config['mlp'])
+    # print('stage3')
+    #gan.eval_iqa_orig()
+    #gan.eval_iqa_gene(epoch=390)
     # gan.eval_iqa_orig(names=['valid'])
     # get_best()
     # train_plot(gan.iqa_hash) # plot image quality, accuracy change as function of time; scatter plots between variables
@@ -264,4 +390,3 @@ if __name__ == "__main__":
     # mlp_main(1, 5, 'mlp_fcn', '', cnn_config['mlp'])
     # roc_plot_perfrom_table(mode=['mlp_fcn', 'mlp_fcn_aug'])  # plot roc and pr curve; print mlp performance table
     # sample()
-    

@@ -9,6 +9,7 @@ import collections
 
 
 def plot_curve(curve, xs, ys_mean, ys_upper, ys_lower, ax, color, hatch, alpha, line, title, **kwargs):
+    title = 'ADNI test' if title=='test' else title
     assert curve in ['roc', 'pr']
     if curve == 'roc':
         ys_mean = ys_mean[::-1]

@@ -2,7 +2,7 @@ import os
 from os import path
 import sys
 sys.path.insert(1, './plot/')
-from plot import roc_plot_perfrom_table
+# from plot import roc_plot_perfrom_table
 import collections
 import torch
 import torch.nn as nn
@@ -26,6 +26,7 @@ from tabulate import tabulate
 3. early stopping or set epoch
 
 want positive changes
+
 
 """
 
@@ -91,6 +92,7 @@ class CNN_Wrapper:
                             os.remove(self.checkpoint_dir + File)
                         except:
                             pass
+            # print('saving at:', '{}{}_{}.pth'.format(self.checkpoint_dir, self.model_name, self.optimal_epoch))
             torch.save(self.model.state_dict(), '{}{}_{}.pth'.format(self.checkpoint_dir, self.model_name, self.optimal_epoch))
 
     def train_model_epoch(self):
@@ -189,6 +191,8 @@ class FCN_Wrapper(CNN_Wrapper):
     def test_and_generate_DPMs(self, epoch=None, stages=['train', 'valid', 'test', 'AIBL', 'NACC']):
         if epoch:
             self.model.load_state_dict(torch.load('{}fcn_{}.pth'.format(self.checkpoint_dir, epoch)))
+        else:
+            self.model.load_state_dict(torch.load('{}fcn_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch)))
         print('testing and generating DPMs ... ')
         self.fcn = self.model.dense_to_conv()
         self.fcn.train(False)
@@ -517,27 +521,222 @@ class FCN_GAN:
 
     def generate_DPMs(self, epoch=None, stages=['train', 'valid', 'test', 'NACC', 'AIBL']):
         if epoch:
-            self.fcn.model.load_state_dict(torch.load('{}fcn_{}.pth'.format(self.checkpoint_dir, epoch)))
+            self.fcn.test_and_generate_DPMs(epoch=epoch, stages=stages)
         else:
-            self.fcn.model.load_state_dict(torch.load('{}fcn_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch)))
-        self.fcn.test_and_generate_DPMs(stages=stages)
+            self.fcn.test_and_generate_DPMs(epoch=self.optimal_epoch, stages=stages)
+
+
+    def get_iqa_gan_data(self):
+
+        train_3T_list, train_15T_list = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_p').get_filenames()
+        valid_3T_list, valid_15T_list = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='valid').get_filenames()
+        test_3T_list, test_15T_list   = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='test').get_filenames()
+        path_15T = '/data/datasets/ADNI_NoBack/'
+        path_3T = '/data/datasets/ADNI_NoBack/'
+        path_15P = './ADNIP_NoBack/'
+        content = []
+        with torch.no_grad():
+            self.netG.train(False)
+            for i in range(len(train_15T_list)):
+                print(i)
+                case_15T, case_15p, case_3T = {'stage':'train', 'mag':'1.5T'}, {'stage':'train', 'mag':'1.5P'}, {'stage':'train', 'mag':'3T'}
+                case_15T['filename'] = train_15T_list[i]
+                case_15p['filename'] = train_15T_list[i]
+                case_3T['filename']  = train_3T_list[i]
+                case_15T['ID'] = case_15T['filename'][5:15]
+                case_15p['ID'] = case_15p['filename'][5:15]
+                case_3T['ID'] = case_3T['filename'][5:15]
+                data_15T = np.load(path_15T+case_15T['filename'])
+                data_3T = np.load(path_3T+case_3T['filename'])
+                tensor = torch.Tensor(np.expand_dims(np.expand_dims(data_15T, axis=0), axis=0)).cuda()
+                data_15p = self.netG(tensor).data.cpu().numpy().squeeze() + data_15T
+                for m in ['SNR', 'brisque', 'niqe']:
+                    case_15T[m] = iqa_tensor(data_15T, self.eng, '', m, '')
+                    case_15p[m] = iqa_tensor(data_15p, self.eng, '', m, '')
+                    case_3T[m]  = iqa_tensor(data_3T, self.eng, '', m, '')
+                m = 'ssim'
+                case_15T[m]  = SSIM(data_15T, data_3T)
+                case_15p[m]  = SSIM(data_15p, data_3T)
+                case_3T[m]  = SSIM(data_3T, data_3T)
+                content.extend([case_3T, case_15p, case_15T])
+            for i in range(len(valid_15T_list)):
+                print(i)
+                case_15T, case_15p, case_3T = {'stage':'valid', 'mag':'1.5T'}, {'stage':'valid', 'mag':'1.5P'}, {'stage':'valid', 'mag':'3T'}
+                case_15T['filename'] = valid_15T_list[i]
+                case_15p['filename'] = valid_15T_list[i]
+                case_3T['filename']  = valid_3T_list[i]
+                case_15T['ID'] = case_15T['filename'][5:15]
+                case_15p['ID'] = case_15p['filename'][5:15]
+                case_3T['ID'] = case_3T['filename'][5:15]
+                data_15T = np.load(path_15T+case_15T['filename'])
+                data_3T = np.load(path_3T+case_3T['filename'])
+                tensor = torch.Tensor(np.expand_dims(np.expand_dims(data_15T, axis=0), axis=0)).cuda()
+                data_15p = self.netG(tensor).data.cpu().numpy().squeeze() + data_15T
+                for m in ['SNR', 'brisque', 'niqe']:
+                    case_15T[m] = iqa_tensor(data_15T, self.eng, '', m, '')
+                    case_15p[m] = iqa_tensor(data_15p, self.eng, '', m, '')
+                    case_3T[m]  = iqa_tensor(data_3T, self.eng, '', m, '')
+                m = 'ssim'
+                case_15T[m]  = SSIM(data_15T, data_3T)
+                case_15p[m]  = SSIM(data_15p, data_3T)
+                case_3T[m]  = SSIM(data_3T, data_3T)
+                content.extend([case_3T, case_15p, case_15T])
+            for i in range(len(test_15T_list)):
+                print(i)
+                case_15T, case_15p, case_3T = {'stage':'test', 'mag':'1.5T'}, {'stage':'test', 'mag':'1.5P'}, {'stage':'test', 'mag':'3T'}
+                case_15T['filename'] = test_15T_list[i]
+                case_15p['filename'] = test_15T_list[i]
+                case_3T['filename']  = test_3T_list[i]
+                case_15T['ID'] = case_15T['filename'][5:15]
+                case_15p['ID'] = case_15p['filename'][5:15]
+                case_3T['ID'] = case_3T['filename'][5:15]
+                data_15T = np.load(path_15T+case_15T['filename'])
+                data_3T = np.load(path_3T+case_3T['filename'])
+                tensor = torch.Tensor(np.expand_dims(np.expand_dims(data_15T, axis=0), axis=0)).cuda()
+                data_15p = self.netG(tensor).data.cpu().numpy().squeeze() + data_15T
+                for m in ['SNR', 'brisque', 'niqe']:
+                    case_15T[m] = iqa_tensor(data_15T, self.eng, '', m, '')
+                    case_15p[m] = iqa_tensor(data_15p, self.eng, '', m, '')
+                    case_3T[m]  = iqa_tensor(data_3T, self.eng, '', m, '')
+                m = 'ssim'
+                case_15T[m]  = SSIM(data_15T, data_3T)
+                case_15p[m]  = SSIM(data_15p, data_3T)
+                case_3T[m]  = SSIM(data_3T, data_3T)
+                content.extend([case_3T, case_15p, case_15T])
+
+        print(content)
+
+        with open('ADNI_GAN_iqa_ANOVA.csv', 'w') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=['filename', 'ID', 'stage', 'mag', 'SNR', 'brisque', 'niqe', 'ssim'])
+            writer.writeheader()
+            for case in content:
+                writer.writerow(case)
+
+    def get_iqa_fcn_data(self):
+        ADNI_train_dataloader = CNN_Data(self.config['Data_dir'], self.exp_idx, stage='train', seed=self.seed) # image evaluation
+        ADNI_valid_dataloader = CNN_Data(self.config['Data_dir'], self.exp_idx, stage='valid', seed=self.seed) # image evaluation
+        ADNI_test_dataloader  = CNN_Data(self.config['Data_dir'], self.exp_idx, stage='test', seed=self.seed) # image evaluation
+        AIBL_dataloader  = CNN_Data(self.config['Data_dir'], self.exp_idx, stage='AIBL', seed=self.seed) # image evaluation
+        NACC_dataloader  = CNN_Data(self.config['Data_dir'], self.exp_idx, stage='NACC', seed=self.seed) # image evaluation
+
+        train_list = ADNI_train_dataloader.get_filenames()
+        valid_list = ADNI_valid_dataloader.get_filenames()
+        test_list  = ADNI_test_dataloader.get_filenames()
+        AIBL_list  = AIBL_dataloader.get_filenames()
+        NACC_list  = NACC_dataloader.get_filenames()
+        path_15T = '/data/datasets/ADNI_NoBack/'
+        path_15P = './ADNIP_NoBack/'
+        content = []
+        with torch.no_grad():
+            self.netG.train(False)
+            for i in range(len(train_list)):
+                print(i)
+                case_15T, case_15p = {'stage':'train', 'mag':'1.5T'}, {'stage':'train', 'mag':'1.5P'}
+                case_15T['filename'] = train_list[i]
+                case_15p['filename'] = train_list[i]
+                case_15T['ID'] = case_15T['filename'][5:15]
+                case_15p['ID'] = case_15p['filename'][5:15]
+                data_15T = np.load(path_15T+case_15T['filename'])
+                tensor = torch.Tensor(np.expand_dims(np.expand_dims(data_15T, axis=0), axis=0)).cuda()
+                data_15p = self.netG(tensor).data.cpu().numpy().squeeze() + data_15T
+                for m in ['SNR', 'brisque', 'niqe']:
+                    case_15T[m] = iqa_tensor(data_15T, self.eng, '', m, '')
+                    case_15p[m] = iqa_tensor(data_15p, self.eng, '', m, '')
+                content.extend([case_15p, case_15T])
+            for i in range(len(valid_list)):
+                print(i)
+                case_15T, case_15p = {'stage':'valid', 'mag':'1.5T'}, {'stage':'valid', 'mag':'1.5P'}
+                case_15T['filename'] = valid_list[i]
+                case_15p['filename'] = valid_list[i]
+                case_15T['ID'] = case_15T['filename'][5:15]
+                case_15p['ID'] = case_15p['filename'][5:15]
+                data_15T = np.load(path_15T+case_15T['filename'])
+                tensor = torch.Tensor(np.expand_dims(np.expand_dims(data_15T, axis=0), axis=0)).cuda()
+                data_15p = self.netG(tensor).data.cpu().numpy().squeeze() + data_15T
+                for m in ['SNR', 'brisque', 'niqe']:
+                    case_15T[m] = iqa_tensor(data_15T, self.eng, '', m, '')
+                    case_15p[m] = iqa_tensor(data_15p, self.eng, '', m, '')
+                content.extend([case_15p, case_15T])
+            for i in range(len(test_list)):
+                print(i)
+                case_15T, case_15p = {'stage':'test', 'mag':'1.5T'}, {'stage':'test', 'mag':'1.5P'}
+                case_15T['filename'] = test_list[i]
+                case_15p['filename'] = test_list[i]
+                case_15T['ID'] = case_15T['filename'][5:15]
+                case_15p['ID'] = case_15p['filename'][5:15]
+                data_15T = np.load(path_15T+case_15T['filename'])
+                tensor = torch.Tensor(np.expand_dims(np.expand_dims(data_15T, axis=0), axis=0)).cuda()
+                data_15p = self.netG(tensor).data.cpu().numpy().squeeze() + data_15T
+                for m in ['SNR', 'brisque', 'niqe']:
+                    case_15T[m] = iqa_tensor(data_15T, self.eng, '', m, '')
+                    case_15p[m] = iqa_tensor(data_15p, self.eng, '', m, '')
+                content.extend([case_15p, case_15T])
+            for i in range(len(NACC_list)):
+                print(i)
+                case_15T, case_15p = {'stage':'NACC', 'mag':'1.5T'}, {'stage':'NACC', 'mag':'1.5P'}
+                case_15T['filename'] = NACC_list[i]
+                case_15p['filename'] = NACC_list[i]
+                case_15T['ID'] = case_15T['filename'].split('_')[0]
+                case_15p['ID'] = case_15p['filename'].split('_')[0]
+                data_15T = np.load(path_15T.replace('ADNI', 'NACC')+case_15T['filename'])
+                tensor = torch.Tensor(np.expand_dims(np.expand_dims(data_15T, axis=0), axis=0)).cuda()
+                data_15p = self.netG(tensor).data.cpu().numpy().squeeze() + data_15T
+                for m in ['SNR', 'brisque', 'niqe']:
+                    case_15T[m] = iqa_tensor(data_15T, self.eng, '', m, '')
+                    case_15p[m] = iqa_tensor(data_15p, self.eng, '', m, '')
+                content.extend([case_15p, case_15T])
+            for i in range(len(AIBL_list)):
+                print(i)
+                case_15T, case_15p = {'stage':'AIBL', 'mag':'1.5T'}, {'stage':'AIBL', 'mag':'1.5P'}
+                case_15T['filename'] = AIBL_list[i]
+                case_15p['filename'] = AIBL_list[i]
+                case_15T['ID'] = case_15T['filename'].split('_')[1]
+                case_15p['ID'] = case_15p['filename'].split('_')[1]
+                data_15T = np.load(path_15T.replace('ADNI', 'AIBL')+case_15T['filename'])
+                tensor = torch.Tensor(np.expand_dims(np.expand_dims(data_15T, axis=0), axis=0)).cuda()
+                data_15p = self.netG(tensor).data.cpu().numpy().squeeze() + data_15T
+                for m in ['SNR', 'brisque', 'niqe']:
+                    case_15T[m] = iqa_tensor(data_15T, self.eng, '', m, '')
+                    case_15p[m] = iqa_tensor(data_15p, self.eng, '', m, '')
+                content.extend([case_15p, case_15T])
+        print(content)
+
+        with open('ADNI_FCN_iqa_ANOVA.csv', 'w') as csvfile:
+            writer = csv.DictWriter(csvfile, fieldnames=['filename', 'ID', 'stage', 'mag', 'SNR', 'brisque', 'niqe'])
+            writer.writeheader()
+            for case in content:
+                writer.writerow(case)
+
 
     def eval_153(self, metrics=['CNR', 'SNR', 'brisque', 'niqe', 'piqe']):
+        #TODO: run the 1.5* again
         d = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='all')
-        # print(len(d))
-        for m in metrics:
-            iqa_oris_lo, iqa_oris_hi = [], []
-            for data_lo, data_hi, _ in d: # batchsize=1
-                iqa_oris_lo += [iqa_tensor(data_lo.squeeze(), self.eng, '', m, '')]
-                iqa_oris_hi += [iqa_tensor(data_hi.squeeze(), self.eng, '', m, '')]
-            iqa_oris_lo = np.asarray(iqa_oris_lo)
-            self.iqa_hash[m]['1.5T'] = iqa_oris_lo
-            iqa_oris_hi = np.asarray(iqa_oris_hi)
-            self.iqa_hash[m]['3T'] = iqa_oris_hi
-            p_va = p_val(self.iqa_hash[m]['1.5T'], self.iqa_hash[m]['3T'])
-            print(['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash[m]['1.5T']), np.std(self.iqa_hash[m]['1.5T'])),
-                   '{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash[m]['3T']), np.std(self.iqa_hash[m]['3T'])),
-                   str(p_va), m])
+        d = DataLoader(d, batch_size=1)
+        with torch.no_grad():
+            self.netG.train(False)
+            # print(len(d))
+            for m in metrics:
+                iqa_oris_lo, iqa_oris_hi, iqa_oris_mi = [], [], []
+                for data_lo, data_hi, _ in d: # batchsize=1
+                    data_mi = data_lo.cuda() + self.netG(data_lo.cuda())
+                    # t=data_lo.data.cpu().squeeze()
+                    # print(t.shape)
+                    iqa_oris_lo += [iqa_tensor(np.array(data_lo.data.cpu().squeeze()), self.eng, '', m, '')]
+                    iqa_oris_mi += [iqa_tensor(np.array(data_mi.data.cpu().squeeze()), self.eng, '', m, '')]
+                    iqa_oris_hi += [iqa_tensor(np.array(data_hi.data.cpu().squeeze()), self.eng, '', m, '')]
+                iqa_oris_lo = np.asarray(iqa_oris_lo)
+                self.iqa_hash[m]['1.5T'] = iqa_oris_lo
+                iqa_oris_mi = np.asarray(iqa_oris_mi)
+                self.iqa_hash[m]['1.5T*'] = iqa_oris_mi
+                iqa_oris_hi = np.asarray(iqa_oris_hi)
+                self.iqa_hash[m]['3T'] = iqa_oris_hi
+                p_va1 = p_val(self.iqa_hash[m]['1.5T'], self.iqa_hash[m]['1.5T*'])
+                p_va2 = p_val(self.iqa_hash[m]['1.5T'], self.iqa_hash[m]['3T'])
+                p_va3 = p_val(self.iqa_hash[m]['1.5T*'], self.iqa_hash[m]['3T'])
+                print(['{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash[m]['1.5T']), np.std(self.iqa_hash[m]['1.5T'])),
+                       '{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash[m]['1.5T*']), np.std(self.iqa_hash[m]['1.5T*'])),
+                       '{0:.4f}+/-{1:.4f}'.format(np.mean(self.iqa_hash[m]['3T']), np.std(self.iqa_hash[m]['3T'])),
+                       str(p_va1), str(p_va2), str(p_va3), m])
 
     def eval_iqa_orig(self, metrics=['CNR', 'SNR', 'brisque', 'niqe', 'piqe', 'ssim'], names=['valid', 'test', 'NACC', 'AIBL']):
         self.iqa_log = open(self.iqa_name, 'w')
@@ -745,12 +944,15 @@ if __name__ == "__main__":
 
     # gan.eval_iqa_orig(metrics=['CNR', 'SNR'])
     # gan.eval_iqa_gene(metrics=['CNR', 'SNR'], epoch=390)
-    gan.eval_iqa_orig(metrics=['ssim'])
-    gan.eval_iqa_gene(metrics=['ssim'], epoch=390)
+    # gan.eval_iqa_orig(metrics=['ssim'])
+    # gan.eval_iqa_gene(metrics=['ssim'], epoch=390)
     # gan.eval_iqa_orig()
     # gan.eval_iqa_gene(epoch=390)
 
+    gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, 390)))
     # gan.eval_153()
+    gan.get_iqa_gan_data()
+    # gan.get_iqa_fcn_data()
 
 """
 fcn-gan pipeline:
@@ -758,5 +960,7 @@ fcn-gan pipeline:
 fcn-gan train;
 select optimal timepoint: (a) patch validation accuracy highest
                           (b) plot niqe, accuracy on validtion
+
+
 
 """

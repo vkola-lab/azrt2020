@@ -17,6 +17,7 @@ import time
 from scipy import stats
 from sklearn.metrics import precision_recall_fscore_support
 from scipy.interpolate import interp1d
+import pandas as pd
 
 def signaltonoise(a, axis=0, ddof=0):
     a = np.asanyarray(a)
@@ -107,12 +108,13 @@ def SNR(tensor):
         m = interp1d([np.min(img),np.max(img)],[0,255])
         img = m(img)
         val = signaltonoise(img, axis=None)
-    return val
+    return float(val)
 
 def CNR(tensor):
     # return the signal to noise ratio
     for slice_idx in [80]:
         img = tensor[slice_idx, :, :] #shape 217, 181
+        # print(img.shape)
         m = interp1d([np.min(img),np.max(img)],[0,255])
         img = m(img)
         roi1, roi2 = img[90:120, 80:110], img[110:140, 110:140]
@@ -432,6 +434,41 @@ def read_csv_complete(filename):
         demors.append(demor)
     return filenames, labels, demors
 
+# def combine_csv(f1, f2):
+#     with open(f1, 'r') as f:
+#         reader = csv.reader(f)
+#         csv1 = list(reader)
+#     with open(f2, 'r') as f:
+#         reader = csv.reader(f)
+#         csv2 = list(reader)
+#     filenames, labels, demors = [], [], []
+#     for line in csv1:
+#         print(line)
+#         break
+#         # try:
+#         #     demor = list(map(float, line[2:5]))
+#         #     gender = [0, 1] if demor[1] == 1 else [1, 0]
+#         #     demor = [(demor[0]-70.0)/10.0] + gender + [(demor[2]-27)/2]
+#         #     # demor = [demor[0]] + gender + demor[2:]
+#         # except:
+#         #     continue
+#         # filenames.append(line[0])
+#         # label = 0 if line[1]=='NL' else 1
+#         # labels.append(label)
+#         # demors.append(demor)
+#     print(csv2[0])
+#     df1 = pd.read_csv(f1)
+#     df2 = pd.read_csv(f2)
+#     # df3 = pd.read_csv(f3)
+#     df4 = df1.merge(df2, 'left', on='ID')
+#     print(df1, df2, df4)
+#     print(df2['ID']=='051_S_1123')
+#     print(df2.loc[df2['ID']=='051_S_1123'])
+#     # print(df1['ID']==df2['ID'])
+#
+#     return
 
-# if __name__ == "__main__":
-#     test(item=3, ittt='a', whole=3)
+
+if __name__ == "__main__":
+    # test(item=3, ittt='a', whole=3)
+    combine_csv('ADNI_GAN_iqa_ANOVA.csv', '/home/xzhou/fcn2020/gan2020/lookupcsv/exp0/train_15T_scanner.csv')
