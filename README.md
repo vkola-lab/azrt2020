@@ -18,11 +18,12 @@ Image qualities:
 
 Sample output:
 
-<img src="plot/sample.png" width="695"/>
+<img src="plot/Figure2.tiff" width="695"/>
 
 ROC curves:
 
-<img src="plot/roc.png" width="695"/>
+<img src="plot/Figure3a.tif" width="695"/>
+<img src="plot/Figure3b.tif" width="695"/>
 
 Please refer to our paper for more details.
 
