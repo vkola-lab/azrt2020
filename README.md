@@ -151,6 +151,8 @@ Please modify main.py to train and test your own models, where:
 
 Function 'fcn_main' and 'mlp_main' will do number of repeat time independent FCN model training and MLP model on random splitted data. Model performance is thus evaluated on all runs as mean +/- std.
 
+For the other functions, please explore them in the code & comments.
+
 ```
 DPMs/fcn_exp0/
 DPMs/fcn_exp1/

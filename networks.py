@@ -384,9 +384,6 @@ class FCN_GAN:
                 out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f loss_fcn: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n' %
                     (self.epoch, self.config['epochs'], idx, len(self.gan_train_dataloader), Routput.data.cpu().mean(),
                     Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_3.cpu().sum().item(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
-                # out = 'epoch '+str(self.epoch)+': '+('[%d/%d][%d/%d] D(x): %.4f D(G(z)): %.4f / %.4f Mask L1_norm: %.4f loss_G_3: %.4f loss_G: %.4f loss_D: %.4f loss_AD: %.4f \n' %
-                #     (self.epoch, self.config['epochs'], idx, len(self.gan_train_dataloader), Routput.data.cpu().mean(),
-                #     Foutput.data.cpu().mean(), Goutput.data.cpu().mean(), loss_G_dif.data.cpu().mean(), loss_G_3.cpu().sum().item(), loss_G.data.cpu().sum().item(), (loss_D_R+loss_D_F).data.cpu().sum().item(), AD_loss.data.cpu().sum().item()))
 
                 with open(self.log_name, 'a') as f:
                     f.write(out)
