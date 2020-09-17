@@ -1,4 +1,4 @@
-# Enhancing MR imaging driven Alzheimer’s disease classification performance using generative adversarial learning
+# Enhancing MRI driven Alzheimer’s disease classification performance using generative adversarial learning
 
 ## Introduction
 
