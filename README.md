@@ -144,9 +144,6 @@ python main.py
 ```
 
 
-```
-python main.py
-```
 Please modify main.py to train and test your own models, where:
 
 'gan_main' corresponding to training & generating phase of the GAN model, where one may choose a specified epoch for the generator & FCN.
@@ -155,9 +152,11 @@ Please modify main.py to train and test your own models, where:
 
 'mlp_main' corresponding to training & testing phase of the multilayer perceptron model.
 
+
 Function 'fcn_main' and 'mlp_main' will do number of repeat time independent FCN model training and MLP model on random splitted data. Model performance is thus evaluated on all runs as mean +/- std.
 
 For the other functions, please explore them in the code & comments.
+
 
 ```
 DPMs/fcn_exp0/

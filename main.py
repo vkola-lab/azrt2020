@@ -269,7 +269,6 @@ def sample():
 if __name__ == "__main__":
 
     # cnn_config = read_json('./cnn_config.json')
-    # fcn_main(1, 'fcn', False, cnn_config['fcn'])
     # fcn_main(5, 'fcn', False, cnn_config['fcn']) # train 25 fcn models with random seeds
     # mlp_main(5, 25, 'fcn_mlp', '', cnn_config['mlp']) # train 5*25 mlp models with random seeds on generated DPMs from FCN
     # print('stage1')
@@ -278,14 +277,14 @@ if __name__ == "__main__":
     # print('stage2')
     # mlp_main(1, 25, 'fcn_gan_mlp', 'gan_', cnn_config['mlp']) # train 1*25 mlp models with random seeds on generated DPMs from FCN
     # print('stage3')
-    # gan.eval_iqa_orig()
-    #gan.eval_iqa_gene(epoch=390)
+    # gan.eval_iqa_orig()   # evaluate the original image's quality
+    # gan.eval_iqa_gene(epoch=390)  # generate & evaluate the generated image's quality, see function definition for more options
     # gan.eval_iqa_orig(names=['valid'])
     # get_best()
     # train_plot(gan.iqa_hash) # plot image quality, accuracy change as function of time; scatter plots between variables
 
     # roc_plot_perfrom_table()  # plot roc and pr curve; print mlp performance table
 
-    # gan.pick_time()
+    # gan.pick_time()   # helper function for picking the optimal model
 
-    sample() #retrieve some sample images from the trained model.
+    # sample() # retrieve & plot sample images from the trained model for visualization & evaluation
