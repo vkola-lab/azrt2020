@@ -27,12 +27,12 @@ def gan_main():
     # 2000*0.8*417/(151*0.6)
     # epoch = 7413 for 2000, 4-1-0
     gan = FCN_GAN('./gan_config_optimal.json', 0)
-    gan.train()
-    gan.generate(epoch=390)
+    # gan.train()
+    gan.generate(epoch=390, special=True)
 
-    gan.generate_DPMs(epoch=3780)
+    # gan.generate_DPMs(epoch=3780)
     # gan.fcn.test_and_generate_DPMs(stages=['AIBL'])
-    gan.fcn.test_and_generate_DPMs()
+    # gan.fcn.test_and_generate_DPMs()
 
     return gan
 
@@ -180,7 +180,7 @@ def sample():
             axs[1, 0].set_title('1.5T*', fontweight="bold", fontsize=25)
             axs[1, 0].axis('off')
             axs[2, 0].imshow(orig[:, ::-1, 85].T - plus[:, ::-1, 85].T, vmin=-1, vmax=2.5)
-            axs[2, 0].set_title('Mask', fontweight="bold", fontsize=25)
+            axs[2, 0].set_title('Transformation map', fontweight="bold", fontsize=25)
             axs[2, 0].axis('off')
 
             axs[0, 1].imshow(np.rot90(orig[100, :, :]), vmin=-1, vmax=2.5)
@@ -190,7 +190,7 @@ def sample():
             axs[1, 1].set_title('1.5T*', fontweight="bold", fontsize=25)
             axs[1, 1].axis('off')
             axs[2, 1].imshow(np.rot90(orig[100, :, :] - plus[100, :, :]), vmin=-1, vmax=2.5)
-            axs[2, 1].set_title('Mask', fontweight="bold", fontsize=25)
+            axs[2, 1].set_title('Transformation map', fontweight="bold", fontsize=25)
             axs[2, 1].axis('off')
 
             axs[0, 2].imshow(np.rot90(orig[:, 100, :]), vmin=-1, vmax=2.5)
@@ -200,7 +200,7 @@ def sample():
             axs[1, 2].set_title('1.5T*', fontweight="bold", fontsize=25)
             axs[1, 2].axis('off')
             axs[2, 2].imshow(np.rot90(orig[:, 100, :] - plus[:, 100, :]), vmin=-1, vmax=2.5)
-            axs[2, 2].set_title('Mask', fontweight="bold", fontsize=25)
+            axs[2, 2].set_title('Transformation map', fontweight="bold", fontsize=25)
             axs[2, 2].axis('off')
 
             # Create a Rectangle patch
@@ -220,7 +220,7 @@ def sample():
             axs[1, 3].set_title('1.5T* zoomed', fontweight="bold", fontsize=25)
             axs[1, 3].axis('off')
             axs[2, 3].imshow(np.rot90(orig[80:120, 100, 80:120] - plus[80:120, 100, 80:120]), vmin=-1, vmax=2.5)
-            axs[2, 3].set_title('Mask zoomed', fontweight="bold", fontsize=25)
+            axs[2, 3].set_title('Transformation map zoomed', fontweight="bold", fontsize=25)
             axs[2, 3].axis('off')
 
             axs[0, 4].hist(np.rot90(orig[80:120, 100, 80:120]).flatten(), bins=50, range=(0, 1.8))
@@ -243,7 +243,7 @@ def sample():
             bold_axs_stick(axs[2, 4], 16)
             axs[2, 4].set_xticks([0, 0.5, 1, 1.5])
             axs[2, 4].set_yticks([0, 50, 100, 150])
-            axs[2, 4].set_title('Mask voxel histogram', fontweight="bold", fontsize=25)
+            axs[2, 4].set_title('Transformation map \nvoxel histogram', fontweight="bold", fontsize=25)
             axs[2, 4].set_xlabel('Voxel value', fontsize=25, fontweight='bold')
             axs[2, 4].set_ylabel('Count', fontsize=25, fontweight='bold')
 
@@ -253,37 +253,39 @@ def sample():
             q = np.where(q != 0, q, 1)
             print('kl value:', kl_divergence(p, q))
 
-            cbar = fig.colorbar(im, ax=axs.ravel().tolist())
+            cbaxes = fig.add_axes([0.08, 0.1, 0.03, 0.8])
+            cbar = fig.colorbar(im, ax=axs.ravel().tolist(), cax=cbaxes)
             for l in cbar.ax.yaxis.get_ticklabels():
                 l.set_weight("bold")
                 l.set_fontsize(25)
 
-            plt.savefig(out_dir + name + str(i) + '.png', dpi=300)
+            plt.subplots_adjust(hspace=0.25)
+            plt.savefig(out_dir + name + str(i) + '.tiff', dpi=80)
             plt.close()
 
-            # sys.exit()
+            sys.exit()
 
 
 if __name__ == "__main__":
 
-    cnn_config = read_json('./cnn_config.json')
+    # cnn_config = read_json('./cnn_config.json')
     # fcn_main(1, 'fcn', False, cnn_config['fcn'])
-    fcn_main(5, 'fcn', False, cnn_config['fcn']) # train 25 fcn models with random seeds
-    mlp_main(5, 25, 'fcn_mlp', '', cnn_config['mlp']) # train 5*25 mlp models with random seeds on generated DPMs from FCN
+    # fcn_main(5, 'fcn', False, cnn_config['fcn']) # train 25 fcn models with random seeds
+    # mlp_main(5, 25, 'fcn_mlp', '', cnn_config['mlp']) # train 5*25 mlp models with random seeds on generated DPMs from FCN
     # print('stage1')
 
-    gan = gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
+    # gan = gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
     # print('stage2')
-    mlp_main(1, 25, 'fcn_gan_mlp', 'gan_', cnn_config['mlp']) # train 1*25 mlp models with random seeds on generated DPMs from FCN
+    # mlp_main(1, 25, 'fcn_gan_mlp', 'gan_', cnn_config['mlp']) # train 1*25 mlp models with random seeds on generated DPMs from FCN
     # print('stage3')
-    gan.eval_iqa_orig()
+    # gan.eval_iqa_orig()
     #gan.eval_iqa_gene(epoch=390)
     # gan.eval_iqa_orig(names=['valid'])
     # get_best()
     # train_plot(gan.iqa_hash) # plot image quality, accuracy change as function of time; scatter plots between variables
 
-    roc_plot_perfrom_table()  # plot roc and pr curve; print mlp performance table
+    # roc_plot_perfrom_table()  # plot roc and pr curve; print mlp performance table
 
     # gan.pick_time()
 
-    # sample() #retrieve some sample images from the trained model.
+    sample() #retrieve some sample images from the trained model.

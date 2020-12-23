@@ -239,7 +239,7 @@ class FCN_GAN:
         self.prepare_dataloader()
         self.log_name = self.config["log_name"]
         self.iqa_name = self.config["iqa_name"]
-        self.eng = matlab.engine.start_matlab()
+        # self.eng = matlab.engine.start_matlab()
         self.save_every_epoch = self.config["save_every_epoch"]
 
     def initial_FCN(self, json_file, exp_idx):
@@ -488,7 +488,7 @@ class FCN_GAN:
             self.optimal_epoch = self.epoch
             self.valid_optimal_metric = valid_metric
 
-    def generate(self, dataset_name=['ADNI', 'NACC', 'AIBL'], epoch=None):
+    def generate(self, dataset_name=['ADNI', 'NACC', 'AIBL'], epoch=None, special=False):
         if epoch:
             self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, epoch)))
         else:
@@ -506,15 +506,39 @@ class FCN_GAN:
         Data_lists = [d.Data_list for d in data]
         with torch.no_grad():
             self.netG.train(False)
+            if special:
+                d = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='all')
+                Data_list_lo = d.Data_list_lo
+                Data_list_hi = d.Data_list_hi
+                dataloader = DataLoader(d, batch_size=1)
+                target = ["./ADNI15_NoBack_GAN/", "./ADNIP_NoBack_GAN/", "./ADNI3_NoBack_GAN/"]
+                for t in target:
+                    if not os.path.isdir(t):
+                        os.mkdir(t)
+                for j, (input_lo, input_hi, _) in enumerate(dataloader):
+                    output = input_lo.cuda() + self.netG(input_lo.cuda())
+                    np.save(target[0]+Data_list_lo[j], input_lo.data.cpu().numpy().squeeze())
+                    np.save(target[1]+Data_list_lo[j], output.data.cpu().numpy().squeeze())
+                    np.save(target[2]+Data_list_hi[j], input_hi.data.cpu().numpy().squeeze())
             for i in range(len(dataloaders)):
                 dataloader = dataloaders[i]
                 target = targets[i]
+                if special:
+                    target = [target.replace('P', '15'), target]
+                    for t in target:
+                        if not os.path.isdir(t):
+                            os.mkdir(t)
+                else:
+                    if not os.path.isdir(target):
+                        os.mkdir(target)
                 Data_list = Data_lists[i]
                 for j, (input, label) in enumerate(dataloader):
                     output = input.cuda() + self.netG(input.cuda())
-                    if not os.path.isdir(target):
-                        os.mkdir(target)
-                    np.save(target+Data_list[j], output.data.cpu().numpy().squeeze())
+                    if not special:
+                        np.save(target+Data_list[j], output.data.cpu().numpy().squeeze())
+                    else:
+                        np.save(target[0]+Data_list[j], input_lo.data.cpu().numpy().squeeze())
+                        np.save(target[1]+Data_list[j], output.data.cpu().numpy().squeeze())
 
     def generate_DPMs(self, epoch=None, stages=['train', 'valid', 'test', 'NACC', 'AIBL']):
         if epoch:

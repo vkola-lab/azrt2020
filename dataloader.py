@@ -304,6 +304,7 @@ class MLP_Data(Dataset):
 if __name__ == "__main__":
     transform = Augment()
     dataset = FCN_Data(Data_dir='/data/datasets/ADNI_NoBack/', exp_idx=0, stage='train', transform=None)
+    dataset = CNN_Data(Data_dir='/data/datasets/ADNI_NoBack/', exp_idx=0, stage='train')
     train_dataloader = DataLoader(dataset, batch_size=1)
     for scan1, label in train_dataloader:
         print(scan1.shape)

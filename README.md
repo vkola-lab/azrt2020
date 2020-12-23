@@ -137,6 +137,12 @@ The configuration file is a json file which allows you conveniently change hyper
 ```
 
 ### Train, validate and test the network models
+To run the code in the original setting, simply follow the below commands:
+
+```
+python main.py
+```
+
 
 ```
 python main.py
