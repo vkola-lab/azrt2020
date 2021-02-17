@@ -29,7 +29,7 @@ def plot_legend(axes, crv_lgd_hdl, crv_info, neo_lgd_hdl, set1, set2):
             hdl[ds] += neo_lgd_hdl[ds]
             val[ds] += ['Neurologist', 'Avg. Neurologist']
 
-    convert = {m_name[0]:"1.5T", m_name[1]:"1.5T*", 'fcn_aug':'1.5T Aug'}
+    convert = {m_name[0]:"1.5T", m_name[1]:"3T*", 'fcn_aug':'1.5T Aug'}
 
     for ds in ds_name:
         for m in m_name:
@@ -90,7 +90,7 @@ def roc_plot_perfrom_table(txt_file=None, mode=['fcn_mlp', 'fcn_gan_mlp']):
     plt.rcParams['figure.facecolor'] = 'w'
     plt.rcParams['savefig.facecolor'] = 'w'
 
-    convert = {'fcn':"1.5T", 'fcn_gan':"1.5T*", 'fcn_aug':'1.5T Aug'}
+    convert = {'fcn':"1.5T", 'fcn_gan':"3T*", 'fcn_aug':'1.5T Aug'}
 
     # roc plot
     fig, axes_ = plt.subplots(1, 3, figsize=[18, 6], dpi=100)

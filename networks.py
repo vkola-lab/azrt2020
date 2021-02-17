@@ -547,7 +547,11 @@ class FCN_GAN:
             self.fcn.test_and_generate_DPMs(epoch=self.optimal_epoch, stages=stages)
 
 
-    def get_iqa_gan_data(self):
+    def get_iqa_gan_data(self, epoch=None):
+        if epoch:
+            self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, epoch)))
+        else:
+            self.netG.load_state_dict(torch.load('{}G_{}.pth'.format(self.checkpoint_dir, self.optimal_epoch)))
 
         train_3T_list, train_15T_list = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='train_p').get_filenames()
         valid_3T_list, valid_15T_list = GAN_Data(self.config['Data_dir'], seed=self.seed, stage='valid').get_filenames()
@@ -970,10 +974,12 @@ if __name__ == "__main__":
     # gan.eval_iqa_orig()
     # gan.eval_iqa_gene(epoch=390)
 
-    gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, 390)))
+    # gan.netG.load_state_dict(torch.load('{}G_{}.pth'.format(gan.checkpoint_dir, 390)))
     # gan.eval_153()
-    gan.get_iqa_gan_data()
-    # gan.get_iqa_fcn_data()
+    print('generating csv')
+    
+    gan.get_iqa_gan_data(epoch=750)
+    gan.get_iqa_fcn_data()
 
 """
 fcn-gan pipeline:

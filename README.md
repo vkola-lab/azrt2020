@@ -16,14 +16,6 @@ Image quality metrics:
 
 <img src="plot/iqs.png" width="695"/>
 
-Sample output:
-
-<img src="plot/Figure2.png" width="695"/>
-
-ROC curves:
-
-<img src="plot/Figure3a.png" width="695"/>
-<img src="plot/Figure3b.png" width="695"/>
 
 Please refer to our paper for more details.
 

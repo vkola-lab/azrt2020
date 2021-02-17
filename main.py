@@ -138,7 +138,7 @@ def sample():
     # print('Evaluating IQA results on all datasets:')
     data  = []
     names = ['ADNI', 'NACC', 'AIBL']
-    sources = ["/data/datasets/ADNI_NoBack/", "/data/datasets/NACC_NoBack/", "/data/datasets/AIBL_15_NoBack/"]
+    sources = ["/data_2/brain2020_data/ADNI_NoBack/", "/data_2/brain2020_data/NACC_NoBack/", "/data_2/brain2020_data/AIBL_15_NoBack/"]
     data += [Data(sources[0], class1='ADNI_1.5T_NL', class2='ADNI_1.5T_AD', stage='test', shuffle=False)]
     data += [Data(sources[1], class1='NACC_1.5T_NL', class2='NACC_1.5T_AD', stage='all', shuffle=False)]
     data += [Data(sources[2], class1='AIBL_1.5T_NL', class2='AIBL_1.5T_AD', stage='all', shuffle=False)]
@@ -177,7 +177,7 @@ def sample():
             axs[0, 0].set_ylabel('Probability', fontweight="bold", fontsize=25)
             axs[0, 0].axis('off')
             axs[1, 0].imshow(plus[:, ::-1, 85].T, vmin=-1, vmax=2.5)
-            axs[1, 0].set_title('1.5T*', fontweight="bold", fontsize=25)
+            axs[1, 0].set_title('3T*', fontweight="bold", fontsize=25)
             axs[1, 0].axis('off')
             axs[2, 0].imshow(orig[:, ::-1, 85].T - plus[:, ::-1, 85].T, vmin=-1, vmax=2.5)
             axs[2, 0].set_title('Transformation map', fontweight="bold", fontsize=25)
@@ -187,7 +187,7 @@ def sample():
             axs[0, 1].set_title('1.5T', fontweight="bold", fontsize=25)
             axs[0, 1].axis('off')
             im = axs[1, 1].imshow(np.rot90(plus[100, :, :]), vmin=-1, vmax=2.5)
-            axs[1, 1].set_title('1.5T*', fontweight="bold", fontsize=25)
+            axs[1, 1].set_title('3T*', fontweight="bold", fontsize=25)
             axs[1, 1].axis('off')
             axs[2, 1].imshow(np.rot90(orig[100, :, :] - plus[100, :, :]), vmin=-1, vmax=2.5)
             axs[2, 1].set_title('Transformation map', fontweight="bold", fontsize=25)
@@ -197,7 +197,7 @@ def sample():
             axs[0, 2].set_title('1.5T', fontweight="bold", fontsize=25)
             axs[0, 2].axis('off')
             axs[1, 2].imshow(np.rot90(plus[:, 100, :]), vmin=-1, vmax=2.5)
-            axs[1, 2].set_title('1.5T*', fontweight="bold", fontsize=25)
+            axs[1, 2].set_title('3T*', fontweight="bold", fontsize=25)
             axs[1, 2].axis('off')
             axs[2, 2].imshow(np.rot90(orig[:, 100, :] - plus[:, 100, :]), vmin=-1, vmax=2.5)
             axs[2, 2].set_title('Transformation map', fontweight="bold", fontsize=25)
@@ -217,7 +217,7 @@ def sample():
             axs[0, 3].set_title('1.5T zoomed', fontweight="bold", fontsize=25)
             axs[0, 3].axis('off')
             axs[1, 3].imshow(np.rot90(plus[80:120, 100, 80:120]), vmin=-1, vmax=2.5)
-            axs[1, 3].set_title('1.5T* zoomed', fontweight="bold", fontsize=25)
+            axs[1, 3].set_title('3T* zoomed', fontweight="bold", fontsize=25)
             axs[1, 3].axis('off')
             axs[2, 3].imshow(np.rot90(orig[80:120, 100, 80:120] - plus[80:120, 100, 80:120]), vmin=-1, vmax=2.5)
             axs[2, 3].set_title('Transformation map zoomed', fontweight="bold", fontsize=25)
@@ -235,7 +235,7 @@ def sample():
             bold_axs_stick(axs[1, 4], 16)
             axs[1, 4].set_xticks([0, 0.5, 1, 1.5])
             axs[1, 4].set_yticks([0, 20, 40, 60])
-            axs[1, 4].set_title('1.5T* voxel histogram', fontweight="bold", fontsize=25)
+            axs[1, 4].set_title('3T* voxel histogram', fontweight="bold", fontsize=25)
             # axs[1, 4].set_xlabel('Voxel value', fontsize=25, fontweight='bold')
             axs[1, 4].set_ylabel('Count', fontsize=25, fontweight='bold')
 
@@ -273,7 +273,7 @@ if __name__ == "__main__":
     # mlp_main(5, 25, 'fcn_mlp', '', cnn_config['mlp']) # train 5*25 mlp models with random seeds on generated DPMs from FCN
     # print('stage1')
 
-    # gan = gan_main()       # train FCN-GAN; generate 1.5T*; generate DPMs for mlp and plot MCC heatmap
+    # gan = gan_main()       # train FCN-GAN; generate 3T*; generate DPMs for mlp and plot MCC heatmap
     # print('stage2')
     # mlp_main(1, 25, 'fcn_gan_mlp', 'gan_', cnn_config['mlp']) # train 1*25 mlp models with random seeds on generated DPMs from FCN
     # print('stage3')
@@ -283,7 +283,7 @@ if __name__ == "__main__":
     # get_best()
     # train_plot(gan.iqa_hash) # plot image quality, accuracy change as function of time; scatter plots between variables
 
-    # roc_plot_perfrom_table()  # plot roc and pr curve; print mlp performance table
+    roc_plot_perfrom_table()  # plot roc and pr curve; print mlp performance table
 
     # gan.pick_time()   # helper function for picking the optimal model
 
