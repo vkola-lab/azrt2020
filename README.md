@@ -2,19 +2,19 @@
 
 ## Introduction
 
-This repo contains a PyTorch implementation of a deep learning framework that enhance Alzheimer’s disease (AD) classification performance using MRI scans of multiple magnetic field strengths, while also improve the image quality. The framework contains a generative adversarial network (GAN), a fully convolutional networks (FCN), and a multilayer perceptron. See below for the overall structure of our framework.
+This repo contains a PyTorch implementation of a deep learning framework that enhance Alzheimer’s disease (AD) classification performance using MRI scans of multiple magnetic field strengths, while also improve the image quality. The framework contains a generative adversarial network (GAN), a disease classifier. See below for the overall structure of our framework. The generator will try to generate 3T\* images based on 1.5T input, while the discriminator will try to identify between the generated 3T\* images and the original 3T images. The disease classifier will be trained together with the GANs, using the 3T\* as input to predict the binary classification between NC (normal cognition) and AD.
 
 <img src="plot/structure.png" width="695"/>
 
 The modified GAN was developed on ADNI training and validation sets and its performance was evaluated on ADNI testing set and 2 external testing datasets (NACC and AIBL). See below for the results.
 
-Model performance:
+Disease classification performance:
 
 <img src="plot/accuracy.png" width="695"/>
 
 Image quality metrics:
 
-<img src="plot/iqs.png" width="695"/>
+<img src="plot/iqs.png" width="850"/>
 
 
 Please refer to our paper for more details.
@@ -51,7 +51,7 @@ Please note that the dependencies may require Python 3.6 or greater. It is recom
 ### Preprocessing
 #### 1. preprocessing steps for FCN model:
 
-* **step1: Linear registration using FSL FLIRT function** (need FSL to be installed). 
+* **step1: Linear registration using FSL FLIRT function** (need FSL to be installed).
 
     We provided this bash pipeline (Data_Preprocess/registration.sh) to perform this step. To run the registration.sh on a single case:
     ```
@@ -62,27 +62,27 @@ Please note that the dependencies may require Python 3.6 or greater. It is recom
     python registration.py folder_of_raw_data/ folder_for_processed_data/
     ```
 
-* **step2: convert nifit into numpy and perform z-score voxel normalization** 
+* **step2: convert nifit into numpy and perform z-score voxel normalization**
 
     "(scan-scan.mean())/scan.std()"        
 
-* **step3: clip out the intensity outliers (voxel<-1 or voxel>2.5)** 
+* **step3: clip out the intensity outliers (voxel<-1 or voxel>2.5)**
 
     "np.clip(scan, -1, 2.5)"   
-    
+
     To run step 2 and 3 together:
     ```
     python intensity_normalization_and_clip.py folder_for_step1_outcomes/
     ```
-    
-* **step4: background removal** 
-    
+
+* **step4: background removal**
+
     Background signals outside the skull exist in the MRI. We set all background voxels with the same intensity (value=-1) to decrease the incluence of background signals. The general idea of doing background removal is using the Depth First Search with corners as starting points, then gradually filling out the searched background regions, until it reach outer bright sphere signals from skull fat. To run this step:
-    
+
     ```
     python back_remove.py folder_for_prev_outcome_after_step123/ folder_for_final_output_of_step4/
     ```
-    
+
 
 ### Configuration file
 
