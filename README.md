@@ -48,6 +48,42 @@ The tool was developped based on the following packages:
 
 Please note that the dependencies may require Python 3.6 or greater. It is recommemded to install and maintain all packages by using [`conda`](https://www.anaconda.com/) or [`pip`](https://pypi.org/project/pip/). For the installation of GPU accelerated PyTorch, additional effort may be required. Please check the official websites of [PyTorch](https://pytorch.org/get-started/locally/) and [CUDA](https://developer.nvidia.com/cuda-downloads) for detailed instructions.
 
+### Preprocessing
+#### 1. preprocessing steps for FCN model:
+
+* **step1: Linear registration using FSL FLIRT function** (need FSL to be installed). 
+
+    We provided this bash pipeline (Data_Preprocess/registration.sh) to perform this step. To run the registration.sh on a single case:
+    ```
+    bash registation.sh folder_of_raw_nifti/ filename.nii output_folder_for_processed_data/
+    ```
+    To register all data in a folder, you can use the python script (Data_Preprocess/registration.py) in which calls the registration.sh.
+    ```
+    python registration.py folder_of_raw_data/ folder_for_processed_data/
+    ```
+
+* **step2: convert nifit into numpy and perform z-score voxel normalization** 
+
+    "(scan-scan.mean())/scan.std()"        
+
+* **step3: clip out the intensity outliers (voxel<-1 or voxel>2.5)** 
+
+    "np.clip(scan, -1, 2.5)"   
+    
+    To run step 2 and 3 together:
+    ```
+    python intensity_normalization_and_clip.py folder_for_step1_outcomes/
+    ```
+    
+* **step4: background removal** 
+    
+    Background signals outside the skull exist in the MRI. We set all background voxels with the same intensity (value=-1) to decrease the incluence of background signals. The general idea of doing background removal is using the Depth First Search with corners as starting points, then gradually filling out the searched background regions, until it reach outer bright sphere signals from skull fat. To run this step:
+    
+    ```
+    python back_remove.py folder_for_prev_outcome_after_step123/ folder_for_final_output_of_step4/
+    ```
+    
+
 ### Configuration file
 
 The configuration file is a json file which allows you conveniently change hyperparameters of models used in this study.
