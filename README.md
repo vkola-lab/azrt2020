@@ -1,6 +1,6 @@
 # Enhancing magnetic resonance imaging driven Alzheimer’s disease classification performance using generative adversarial learning
 
-This work is accepted in _Alzheimer's Research & Therapy_
+This work is published in _Alzheimer's Research & Therapy_. See here: https://doi.org/10.1186/s13195-021-00797-5
 
 ## Introduction
 
