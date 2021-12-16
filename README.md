@@ -4,7 +4,7 @@ This work is published in _Alzheimer's Research & Therapy_ (https://doi.org/10.1
 
 ## Introduction
 
-This repo contains a PyTorch implementation of a deep learning framework that enhance Alzheimer’s disease (AD) classification performance using MRI scans of multiple magnetic field strengths, while also improve the image quality. The framework contains a generative adversarial network (GAN), a disease classifier. See below for the overall structure of our framework. The generator will try to generate 3T\* images based on 1.5T input, while the discriminator will try to identify between the generated 3T\* images and the original 3T images. The disease classifier will be trained together with the GANs, using the 3T\* as input to predict the binary classification between NC (normal cognition) and AD.
+This repo contains a PyTorch implementation of a deep learning framework that can be used to enhance Alzheimer’s disease (AD) classification performance using MRI scans of multiple magnetic field strengths, while also improving the quality of the images. The framework contains a generative adversarial network (GAN) and a classifier. See below for the overall structure of our framework. The generator will attempt to create 3T\* images based on images of 1.5T scans, while the discriminator attempts to distinguish the differences between the generated 3T\* images and the original 3T images. The classifier is trained together with the GANs, using the 3T\* as input to predict the output class label (i.e., Normal cognition (NC) versus AD. More details are available in the manuscript.
 
 <p align="center">
 <img src="plot/structure.png" width="695"/>
